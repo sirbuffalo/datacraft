@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0d0c">
+  <title>mccomp — Minecraft data-pack compiler</title>
+  <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="wasm_exec.js"></script>
+  <script src="vendor/codemirror/codemirror.min.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">MINECRAFT DATA-PACK TOOLCHAIN</p>
+        <h1>mccomp</h1>
+      </div>
+      <div class="runtime-status" id="runtimeStatus" data-state="loading">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Loading compiler…</span>
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="Compiler workspace">
+      <aside class="settings-panel">
+        <div class="panel-heading">
+          <span class="step">01</span>
+          <div>
+            <h2>Pack settings</h2>
+            <p>Configure the generated data pack.</p>
+          </div>
+        </div>
+
+        <label>
+          Pack name
+          <input id="packName" value="example" spellcheck="false" autocomplete="off">
+        </label>
+
+        <label>
+          Description
+          <input id="description" value="Built with mccomp" autocomplete="off">
+        </label>
+
+        <label>
+          Pack format
+          <input id="packFormat" type="number" min="1" value="48">
+        </label>
+
+        <div class="convention-card">
+          <span>Runtime model</span>
+          <strong>One per namespace</strong>
+          <code>&lt;namespace&gt;</code>
+        </div>
+
+        <button class="compile-button" id="compileButton" disabled>
+          <span>Compile data pack</span>
+          <kbd>⌘ ↵</kbd>
+        </button>
+      </aside>
+
+      <section class="editor-panel">
+        <div class="editor-toolbar">
+          <div class="file-tab"><span class="file-dot"></span>main.mc</div>
+          <span id="lineCount">0 lines</span>
+        </div>
+        <label class="sr-only" for="sourceEditor">mccomp source</label>
+        <textarea id="sourceEditor" spellcheck="false" aria-label="mccomp source code">namespace example
+
+def load():
+    global counter
+    counter = 0
+
+def tick():
+    global counter
+    counter += 1
+
+export def add(a, b):
+    return a + b</textarea>
+      </section>
+
+      <aside class="output-panel">
+        <div class="panel-heading">
+          <span class="step">02</span>
+          <div>
+            <h2>Build output</h2>
+            <p id="outputSummary">Compile to inspect generated files.</p>
+          </div>
+        </div>
+
+        <div class="message" id="message" data-kind="idle">
+          <strong>Ready when you are</strong>
+          <span>The compiler runs entirely in this browser.</span>
+        </div>
+
+        <div class="file-list" id="fileList" aria-live="polite"></div>
+
+        <button class="download-button" id="downloadButton" disabled>
+          Download data pack <span>ZIP</span>
+        </button>
+      </aside>
+    </section>
+
+    <footer>
+      <span>Static. Local. No source leaves your browser.</span>
+      <span>Go + WebAssembly</span>
+    </footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,20 @@
+namespace example
+
+def load():
+    global counter
+    counter = 0
+    limit = 5
+    doubled = limit * 2
+    result = doubled + 1
+    /say Example pack loaded
+    return result
+
+def tick():
+    global counter
+    counter += 1
+    reached_limit = counter >= 5
+    return reached_limit
+
+export def reset():
+    global counter
+    counter = 0

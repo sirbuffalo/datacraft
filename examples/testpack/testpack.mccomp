@@ -1,0 +1,283 @@
+namespace testpack
+
+def add(a, b):
+    return a + b
+
+def branch(mode):
+    if mode == 1:
+        return 10
+    elif mode == 2:
+        return 20
+    else:
+        return 30
+
+def nested_return(a, b):
+    if a:
+        if b:
+            return 8
+    return 0
+
+def truthy(value):
+    if value:
+        return 1
+    return 0
+
+def first(items):
+    return items[0]
+
+def pass_list(items):
+    return items
+
+def find_in_list(items):
+    for item in items:
+        if item == 2:
+            return item
+    return 0
+
+def return_from_while():
+    value = 0
+    while value < 4:
+        value += 1
+        if value == 3:
+            return value
+    return 0
+
+def set_global():
+    global shared
+    shared = 11
+
+def get_global():
+    global shared
+    return shared
+
+def typed_format(value: int, label: str):
+    joined = label & str(value)
+    return joined == "value=5"
+
+def typed_string_global():
+    global typed_title: str
+    typed_title = "global"
+    return typed_title == "global"
+
+export def run_tests():
+    addition = add(2, 3)
+    say("Testing addition: got ", addition, " expected 5")
+    subtraction = 9 - 4
+    say("Testing subtraction: got ", subtraction, " expected 5")
+    multiplication = 3 * 4
+    say("Testing multiplication: got ", multiplication, " expected 12")
+    division = 12 / 3
+    say("Testing division: got ", division, " expected 4")
+    remainder = 14 % 5
+    say("Testing remainder: got ", remainder, " expected 4")
+    word_remainder = 14 mod 5
+    say("Testing mod keyword: got ", word_remainder, " expected 4")
+    negative = -5
+    say("Testing unary minus: got ", negative, " expected -5")
+    positive = +5
+    say("Testing unary plus: got ", positive, " expected 5")
+
+    compound = 10
+    compound += 5
+    compound -= 3
+    compound *= 2
+    compound /= 6
+    say("Testing compound assignments: got ", compound, " expected 4")
+
+    equal = 5 == 5
+    say("Testing ==: got ", equal, " expected 1")
+    unequal = 5 != 4
+    say("Testing !=: got ", unequal, " expected 1")
+    less = 4 < 5
+    say("Testing <: got ", less, " expected 1")
+    less_equal = 5 <= 5
+    say("Testing <=: got ", less_equal, " expected 1")
+    greater = 6 > 5
+    say("Testing >: got ", greater, " expected 1")
+    greater_equal = 5 >= 5
+    say("Testing >=: got ", greater_equal, " expected 1")
+
+    bool_and = True and True
+    say("Testing and: got ", bool_and, " expected 1")
+    bool_or = False or True
+    say("Testing or: got ", bool_or, " expected 1")
+    bool_not = not False
+    say("Testing not: got ", bool_not, " expected 1")
+    negative_truthy = truthy(-4)
+    say("Testing negative truthiness: got ", negative_truthy, " expected 1")
+    zero_falsy = truthy(0)
+    say("Testing zero falsiness: got ", zero_falsy, " expected 0")
+
+    say("Testing if branch: got ", branch(1), " expected 10")
+    say("Testing elif branch: got ", branch(2), " expected 20")
+    say("Testing else branch: got ", branch(3), " expected 30")
+    say("Testing nested return: got ", nested_return(True, True), " expected 8")
+
+    set_global()
+    say("Testing global: got ", get_global(), " expected 11")
+
+    greeting = "hello"
+    say("Testing string variable: got ", greeting, " expected hello")
+    greeting_copy = greeting
+    say("Testing string copy: got ", greeting_copy, " expected hello")
+    same_string = greeting == "hello"
+    say("Testing string == true: got ", same_string, " expected 1")
+    wrong_string = greeting == "world"
+    say("Testing string == false: got ", wrong_string, " expected 0")
+    different_string = greeting != "world"
+    say("Testing string !=: got ", different_string, " expected 1")
+    joined_string = "score=" & str(5)
+    say("Testing string join and str(int): got ", joined_string, " expected score=5")
+    joined_comparison = joined_string == "score=5"
+    say("Testing joined string comparison: got ", joined_comparison, " expected 1")
+    bool_string = str(True)
+    say("Testing str(bool): got ", bool_string, " expected 1")
+    say("Testing typed function inputs: got ", typed_format(5, "value="), " expected 1")
+    say("Testing typed global: got ", typed_string_global(), " expected 1")
+
+    say("Testing is int: got ", 5 is int, " expected 1")
+    say("Testing bool subset true: got ", 1 is bool, " expected 1")
+    say("Testing bool subset false: got ", 2 is bool, " expected 0")
+    say("Testing bool is int: got ", True is int, " expected 1")
+    say("Testing is str: got ", greeting is str, " expected 1")
+    type_list = [1]
+    say("Testing is list: got ", type_list is list, " expected 1")
+    say("Testing bool(0): got ", bool(0), " expected 0")
+    say("Testing bool(nonzero): got ", bool(-3), " expected 1")
+    say("Testing bool(empty string): got ", bool(""), " expected 0")
+    say("Testing bool(string): got ", bool("hello"), " expected 1")
+
+    mixed = [1, "two", [3, "four"]]
+    say("Testing mixed list: got ", mixed, " expected [1,\"two\",[3,\"four\"]]")
+    say("Testing mixed string item: got ", mixed[1], " expected two")
+    say("Testing mixed item type: got ", mixed[1] is str, " expected 1")
+    mixed.append("five")
+    say("Testing append string: got ", mixed, " expected [1,\"two\",[3,\"four\"],\"five\"]")
+    mixed.insert(1, "inserted")
+    say("Testing insert string: got ", mixed[1], " expected inserted")
+
+    dynamic_mixed = [7, "dynamic", [8, 9]]
+    dynamic_index = 1
+    say("Testing dynamic string index: got ", dynamic_mixed[dynamic_index], " expected dynamic")
+    say("Testing dynamic indexed type: got ", dynamic_mixed[dynamic_index] is str, " expected 1")
+    dynamic_value = dynamic_mixed[dynamic_index]
+    say("Testing dynamic value assignment: got ", dynamic_value, " expected dynamic")
+    say("Testing dynamic assigned type: got ", dynamic_value is str, " expected 1")
+    say("Testing mixed iteration follows with 3 value/type lines:")
+    for mixed_value in dynamic_mixed:
+        say("Mixed iteration value ", mixed_value, " types int/str/list: ", mixed_value is int, "/", mixed_value is str, "/", mixed_value is list)
+    removed_string = dynamic_mixed.remove(1)
+    say("Testing removed string return: got ", removed_string, " expected dynamic")
+    removed_list = dynamic_mixed.remove()
+    say("Testing removed list return: got ", removed_list, " expected [8,9]")
+    say("Testing removed list type: got ", removed_list is list, " expected 1")
+    say("Testing bool(empty list): got ", bool([]), " expected 0")
+    say("Testing bool(nonempty list): got ", bool([1]), " expected 1")
+
+    entity_target = @p
+    say("Testing entity variable type: got ", entity_target is entity, " expected 1")
+    entity_copy = entity_target
+    say("Testing entity copy type: got ", entity_copy is entity, " expected 1")
+    entity_items = [@p]
+    say("Testing entity list item type: got ", entity_items[0] is entity, " expected 1")
+    entity_items.append(@p)
+    entity_items.insert(1, @p)
+    say("Testing entity list mutations: got ", len(entity_items), " expected 3")
+    entity_from_list = entity_items[0]
+    say("Testing entity loaded from list: got ", entity_from_list is entity, " expected 1")
+
+    items = [1, 2, 3]
+    say("Testing list read: got ", first(items), " expected 1")
+    items[0] = 5
+    say("Testing list constant write: got ", items[0], " expected 5")
+    index = 1
+    items[index] = 9
+    say("Testing list dynamic write/read: got ", items[index], " expected 9")
+    items.append(4)
+    say("Testing append and len: got ", len(items), " expected 4")
+    items.insert(1, 7)
+    say("Testing constant insert: got ", items[1], " expected 7")
+    insert_index = 2
+    items.insert(insert_index, 8)
+    say("Testing dynamic insert: got ", items[insert_index], " expected 8")
+    say("Testing remove(index) value: got ", items.remove(1), " expected 7")
+    say("Testing remove() value: got ", items.remove(), " expected 4")
+    say("Testing list after removes: got ", items, " expected [5,8,9,3]")
+    copied = pass_list(items)
+    say("Testing list function output: got ", copied, " expected [5,8,9,3]")
+    empty = []
+    say("Testing empty list: got ", empty, " expected []")
+
+    matrix = [[1, 2], [3, 4]]
+    say("Testing nested list: got ", matrix, " expected [[1,2],[3,4]]")
+    say("Testing nested sublist: got ", matrix[0], " expected [1,2]")
+    say("Testing chained list read: got ", matrix[1][1], " expected 4")
+    matrix[0][1] = 8
+    say("Testing nested list write: got ", matrix[0][1], " expected 8")
+    matrix[1] = [9, 10]
+    say("Testing sublist replacement: got ", matrix[1], " expected [9,10]")
+    row = 1
+    column = 0
+    matrix[row][column] = 12
+    say("Testing dynamic nested write/read: got ", matrix[row][column], " expected 12")
+
+    list_total = 0
+    loop_items = [1, 2, 3]
+    for item in loop_items:
+        list_total += item
+    say("Testing for list: got ", list_total, " expected 6")
+
+    range_total = 0
+    for number in range(1, 5):
+        range_total += number
+    say("Testing range: got ", range_total, " expected 10")
+
+    reverse_total = 0
+    for number in range(5, 0, -2):
+        reverse_total += number
+    say("Testing negative range step: got ", reverse_total, " expected 9")
+
+    break_total = 0
+    for item in loop_items:
+        if item == 3:
+            break
+        break_total += item
+    say("Testing break in for/if: got ", break_total, " expected 3")
+
+    continue_total = 0
+    for item in loop_items:
+        if item == 2:
+            continue
+        continue_total += item
+    say("Testing continue in for/if: got ", continue_total, " expected 4")
+
+    counter = 0
+    while counter < 4:
+        counter += 1
+    say("Testing while: got ", counter, " expected 4")
+
+    while_break = 0
+    while True:
+        while_break += 1
+        if while_break == 2:
+            break
+    say("Testing break in while/if: got ", while_break, " expected 2")
+
+    continue_counter = 0
+    while_continue_total = 0
+    while continue_counter < 4:
+        continue_counter += 1
+        if continue_counter == 2:
+            continue
+        while_continue_total += continue_counter
+    say("Testing continue in while/if: got ", while_continue_total, " expected 8")
+
+    say("Testing return inside for: got ", find_in_list(loop_items), " expected 2")
+    say("Testing return inside while: got ", return_from_while(), " expected 3")
+    say("Testing joined say: got ", 2, "+", 3, " expected 2+3")
+    /tellraw @a {"text":"Testing raw command: got 1 expected 1"}
+    say("--- mccomp test pack complete: 94 tests ---")
+
+def load():
+    say("--- mccomp test pack starting ---")
+    run_tests()

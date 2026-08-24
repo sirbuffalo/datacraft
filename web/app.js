@@ -324,7 +324,7 @@ addFileButton.addEventListener('click', () => {
   let number = 1;
   while (sources.has(`module${number}.dcraft`)) number += 1;
   const filename = `module${number}.dcraft`;
-  sources.set(filename, `namespace module${number}\n\ndef example() -> None:\n    say("module${number}")\n`);
+  sources.set(filename, `namespace module${number}\n\ndef example():\n    say("module${number}")\n`);
   openFile(filename);
   scheduleSave();
 });
@@ -346,7 +346,7 @@ expose def add(a: int, b: int) -> int:
     total: int = a + b
     return total
 
-expose def load() -> None:
+expose def load():
     values: list[int] = [2, 3, 5]
     result: int = add(values[0], values[1])
     if result == 5:

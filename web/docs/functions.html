@@ -8,7 +8,10 @@
 <pre><code>def multiply(value: int, factor: int) -&gt; int:
     return value * factor
 </code></pre>
-<p>Parameters and return values require types in version 2.</p>
+<p>Parameters require types in version 2. A function without a return annotation defaults to <code>None</code>; use <code>-&gt; int</code>, <code>-&gt; str</code>, or another explicit type only when it returns a value.</p>
+<pre><code>def load():
+    say(&#34;loaded&#34;)
+</code></pre>
 </article>
 <article><h3>Exposed functions</h3>
 <pre><code>expose def double(value: int) -&gt; int:

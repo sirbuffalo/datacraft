@@ -14,7 +14,12 @@ def multiply(value: int, factor: int) -> int:
     return value * factor
 ```
 
-Parameters and return values require types in version 2.
+Parameters require types in version 2. A function without a return annotation defaults to `None`; use `-> int`, `-> str`, or another explicit type only when it returns a value.
+
+```dcraft
+def load():
+    say("loaded")
+```
 
 ## Exposed functions
 ```dcraft

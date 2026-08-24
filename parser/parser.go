@@ -180,7 +180,7 @@ func (p *parser) parseFunction() (*ast.Function, error) {
 			return nil, err
 		}
 	} else if p.version == 2 {
-		return nil, Error{p.current().Position, "version 2 functions require a return type"}
+		returnType = &ast.TypeRef{Pos: p.current().Position, Name: "None"}
 	}
 	if _, err = p.consume(token.Colon, "expected ':' after function signature"); err != nil {
 		return nil, err

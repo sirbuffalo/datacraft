@@ -97,6 +97,16 @@ func TestParseExposedFunction(t *testing.T) {
 	}
 }
 
+func TestVersion2FunctionReturnTypeDefaultsToNone(t *testing.T) {
+	program, err := parser.Parse("namespace demo\n\ndef load():\n    say(\"loaded\")\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := program.Functions[0].ReturnType.String(); got != "None" {
+		t.Fatalf("return type = %q, want None", got)
+	}
+}
+
 func TestExportReportsExposeMigration(t *testing.T) {
 	_, err := parser.ParseLegacy("export def reward():\n    return 5\n")
 	if err == nil || err.Error() != "2:1: 'export' was renamed to 'expose'" {

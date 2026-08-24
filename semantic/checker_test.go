@@ -35,6 +35,26 @@ def main() -> None:
 	}
 }
 
+func TestOmittedReturnTypeMeansNone(t *testing.T) {
+	program, err := parser.Parse(`namespace demo
+
+def load():
+    say("loaded")
+`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if err = semantic.Check(program); err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+
+	checkError(t, `namespace demo
+
+def invalid():
+    return 5
+`, "function returns int, not None")
+}
+
 func TestVersion2NamespaceGlobalWritesRequireGlobal(t *testing.T) {
 	checkError(t, `namespace strict
 

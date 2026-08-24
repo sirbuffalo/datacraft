@@ -8,7 +8,7 @@ namespace demo
 expose def add(a: int, b: int) -> int:
     return a + b
 
-expose def load() -> None:
+expose def load():
     values: list[int] = [2, 3, 5]
     result: int = add(values[0], values[1])
     if result == 5:
@@ -17,7 +17,8 @@ expose def load() -> None:
 
 ## Features
 
-- Required function parameter and return types
+- Required parameter types and statically checked return types
+- Omitted function return annotations default to `None`
 - `int`, `bool`, `str`, `entity`, nullable values, lists, and sets
 - `if`, `elif`, `else`, `for`, `while`, `break`, and `continue`
 - Internal ID-based functions and stable public wrappers using `expose`

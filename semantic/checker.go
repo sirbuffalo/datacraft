@@ -94,7 +94,7 @@ func resolveType(ref *ast.TypeRef) (Type, error) {
 	if ref == nil {
 		return Type{}, Error{Message: "missing type"}
 	}
-	valid := ref.Name == "int" || ref.Name == "bool" || ref.Name == "str" || ref.Name == "entity" || ref.Name == "None" || ref.Name == "list" || ref.Name == "set"
+	valid := ref.Name == "int" || ref.Name == "bool" || ref.Name == "str" || ref.Name == "entity" || ref.Name == "nbt" || ref.Name == "None" || ref.Name == "list" || ref.Name == "set"
 	if !valid {
 		return Type{}, Error{ref.Pos, fmt.Sprintf("unknown type %q", ref.Name)}
 	}
@@ -165,6 +165,20 @@ func (c *checker) checkStatements(statements []ast.Statement, scope map[string]b
 			}
 			if current.Constant {
 				return Error{statement.Pos, fmt.Sprintf("cannot assign to constant %q", statement.Name)}
+			}
+			if current.Type.Name == "nbt" && statement.Index != nil {
+				if statement.Operator != token.Assign {
+					return Error{statement.Pos, "NBT fields only support '=' assignment"}
+				}
+				for _, index := range statement.Indices {
+					if _, ok := index.(*ast.String); !ok {
+						return Error{index.Position(), "NBT keys must be string literals"}
+					}
+				}
+				if err := c.validateNBTValue(statement.Value, scope); err != nil {
+					return err
+				}
+				continue
 			}
 			if current.Global {
 				if _, writable := c.writableGlobals[statement.Name]; !writable {
@@ -336,7 +350,17 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 	case *ast.List:
 		return c.collectionLiteral("list", expression.Elements, expression.Pos, scope, expected)
 	case *ast.Set:
+		if expected != nil && expected.Name == "nbt" && len(expression.Elements) == 0 {
+			return Type{Name: "nbt"}, nil
+		}
 		return c.collectionLiteral("set", expression.Elements, expression.Pos, scope, expected)
+	case *ast.NBT:
+		for _, field := range expression.Fields {
+			if err := c.validateNBTValue(field.Value, scope); err != nil {
+				return Type{}, err
+			}
+		}
+		return Type{Name: "nbt"}, nil
 	case *ast.Unary:
 		value, err := c.expressionType(expression.Right, scope, nil)
 		if err != nil {
@@ -347,6 +371,16 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 		}
 		return Type{Name: "int"}, nil
 	case *ast.Binary:
+		if expression.Operator == token.Is {
+			if _, err := c.expressionType(expression.Left, scope, nil); err != nil {
+				return Type{}, err
+			}
+			typeName, ok := expression.Right.(*ast.Identifier)
+			if !ok || (typeName.Name != "bool" && typeName.Name != "int" && typeName.Name != "str" && typeName.Name != "list" && typeName.Name != "entity" && typeName.Name != "nbt") {
+				return Type{}, Error{expression.Right.Position(), "is expects bool, int, str, list, entity, or nbt"}
+			}
+			return Type{Name: "bool"}, nil
+		}
 		var operandExpected *Type
 		if expected != nil && (expression.Operator == token.Plus || expression.Operator == token.Pipe || expression.Operator == token.Ampersand) {
 			operandExpected = expected
@@ -396,8 +430,17 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 		if err != nil {
 			return Type{}, err
 		}
+		if target.Name == "nbt" {
+			if _, ok := expression.Index.(*ast.String); !ok {
+				return Type{}, Error{expression.Index.Position(), "NBT keys must be string literals"}
+			}
+			if expected == nil || expected.Name == "None" {
+				return Type{}, Error{expression.Pos, "an NBT field read requires an expected type"}
+			}
+			return *expected, nil
+		}
 		if target.Name != "list" || target.Element == nil {
-			return Type{}, Error{expression.Pos, "only lists support indexing"}
+			return Type{}, Error{expression.Pos, "only lists and NBT compounds support indexing"}
 		}
 		if index.Name != "int" && index.Name != "bool" {
 			return Type{}, Error{expression.Index.Position(), "list index must be int"}
@@ -407,6 +450,43 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 		return c.callType(expression, scope)
 	}
 	return Type{}, Error{expression.Position(), fmt.Sprintf("cannot type expression %T", expression)}
+}
+
+func (c *checker) validateNBTValue(expression ast.Expression, scope map[string]binding) error {
+	switch value := expression.(type) {
+	case *ast.Integer, *ast.Boolean, *ast.String:
+		return nil
+	case *ast.NBT:
+		for _, field := range value.Fields {
+			if err := c.validateNBTValue(field.Value, scope); err != nil {
+				return err
+			}
+		}
+		return nil
+	case *ast.List:
+		for _, element := range value.Elements {
+			if err := c.validateNBTValue(element, scope); err != nil {
+				return err
+			}
+		}
+		return nil
+	case *ast.Identifier:
+		actual, err := c.expressionType(value, scope, nil)
+		if err != nil {
+			return err
+		}
+		if actual.Name == "int" || actual.Name == "bool" || actual.Name == "str" || actual.Name == "list" || actual.Name == "nbt" {
+			return nil
+		}
+	case *ast.Index:
+		_, err := c.expressionType(value.Target, scope, nil)
+		if err == nil {
+			if _, ok := value.Index.(*ast.String); ok {
+				return nil
+			}
+		}
+	}
+	return Error{expression.Position(), "NBT values support int, bool, str, list, and nbt; None and entities are not allowed"}
 }
 
 func (c *checker) collectionLiteral(name string, elements []ast.Expression, pos token.Position, scope map[string]binding, expected *Type) (Type, error) {

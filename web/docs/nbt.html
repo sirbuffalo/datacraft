@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NBT — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>NBT</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a aria-current="page" href="nbt.html">NBT</a><a href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>NBT compounds</h2></div>
+<p>The <code>nbt</code> type stores JSON-style compound data in the namespace&#39;s Minecraft command storage. It may contain integers, booleans, strings, lists, and nested NBT compounds. Minecraft NBT has no null value, so <code>None</code> and entities cannot be embedded in a compound.</p>
+<div class="docs-grid">
+<article><h3>Literals</h3>
+<pre><code>profile: nbt = {&#34;name&#34;: &#34;Alex&#34;, &#34;health&#34;: 20, &#34;active&#34;: True, &#34;position&#34;: [10, 64, -4], &#34;settings&#34;: {&#34;particles&#34;: False}}
+empty: nbt = {}
+</code></pre>
+<p>NBT arrays may contain different NBT-compatible value kinds. Keys must be string literals.</p>
+</article>
+<article><h3>Bracket access</h3>
+<pre><code>profile[&#34;health&#34;] = 18
+health: int = profile[&#34;health&#34;]
+settings: nbt = profile[&#34;settings&#34;]
+particles: bool = profile[&#34;settings&#34;][&#34;particles&#34;]
+</code></pre>
+<p>NBT does not support property syntax: use <code>profile[&#34;health&#34;]</code>, never <code>profile.health</code>. Field reads need an expected type, normally supplied by a typed variable declaration.</p>
+</article>
+<article><h3>Functions</h3>
+<pre><code>def update(profile: nbt) -&gt; nbt:
+    profile[&#34;active&#34;] = True
+    return profile
+</code></pre>
+<p>Whole NBT variables can be passed to and returned from functions. Structured return data uses runtime storage because Minecraft <code>/return</code> itself only carries an integer result.</p>
+</article>
+<article><h3>Output and length</h3>
+<p><code>say(profile)</code> displays the compound, while <code>say(profile[&#34;name&#34;])</code> displays a selected field. <code>len(profile)</code> returns the number of keys in the compound.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

@@ -107,6 +107,21 @@ func TestVersion2FunctionReturnTypeDefaultsToNone(t *testing.T) {
 	}
 }
 
+func TestParseNBTCompoundAndBracketAccess(t *testing.T) {
+	program, err := parser.Parse("namespace demo\n\ndef load():\n    data: nbt = {\"name\": \"Alex\", \"nested\": {\"active\": True}}\n    data[\"name\"] = \"Steve\"\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	literal, ok := program.Functions[0].Body[0].(*ast.Assignment).Value.(*ast.NBT)
+	if !ok || len(literal.Fields) != 2 || literal.Fields[0].Key != "name" {
+		t.Fatalf("literal = %#v, want two-field NBT compound", literal)
+	}
+	assignment := program.Functions[0].Body[1].(*ast.Assignment)
+	if key, ok := assignment.Index.(*ast.String); !ok || key.Value != "name" {
+		t.Fatalf("index = %#v, want string key", assignment.Index)
+	}
+}
+
 func TestExportReportsExposeMigration(t *testing.T) {
 	_, err := parser.ParseLegacy("export def reward():\n    return 5\n")
 	if err == nil || err.Error() != "2:1: 'export' was renamed to 'expose'" {

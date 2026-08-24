@@ -31,6 +31,7 @@ type Function struct {
 	ReturnsList         bool
 	ReturnsEntitySet    bool
 	ReturnsPrimitiveSet bool
+	ReturnsNBT          bool
 	ReturnHolder        string
 }
 
@@ -42,6 +43,7 @@ type Parameter struct {
 	IsString       bool
 	IsEntitySet    bool
 	IsPrimitiveSet bool
+	IsNBT          bool
 }
 
 type ImportedFunction struct {
@@ -109,6 +111,7 @@ func CompileWithImports(program *ast.Program, functionNamespace string, imports 
 		entityLists:       make(map[uint32]struct{}),
 		entitySets:        make(map[uint32]struct{}),
 		primitiveSets:     make(map[uint32]string),
+		nbtVariables:      make(map[uint32]struct{}),
 		functionIndexes:   make(map[string]int),
 		functionsByName:   make(map[string]*ast.Function),
 		imports:           imports,
@@ -147,6 +150,7 @@ func CompileWithImports(program *ast.Program, functionNamespace string, imports 
 		mapping.ReturnsList = c.functionReturnsList(function)
 		mapping.ReturnsEntitySet = isEntitySetType(function.ReturnType)
 		mapping.ReturnsPrimitiveSet = isPrimitiveSetType(function.ReturnType)
+		mapping.ReturnsNBT = function.ReturnType != nil && function.ReturnType.Name == "nbt"
 	}
 	for range program.Functions {
 		for _, function := range program.Functions {
@@ -161,7 +165,7 @@ func CompileWithImports(program *ast.Program, functionNamespace string, imports 
 		for _, name := range function.Parameters {
 			variableID := c.declared[function.ScopeID][name]
 			mapping.Parameters = append(mapping.Parameters, Parameter{
-				Name: name, VariableID: variableID, Holder: variableHolder(variableID), IsList: c.isList(variableID), IsString: c.isString(variableID), IsEntitySet: c.isEntitySet(variableID), IsPrimitiveSet: c.isPrimitiveSet(variableID),
+				Name: name, VariableID: variableID, Holder: variableHolder(variableID), IsList: c.isList(variableID), IsString: c.isString(variableID), IsEntitySet: c.isEntitySet(variableID), IsPrimitiveSet: c.isPrimitiveSet(variableID), IsNBT: c.isNBT(variableID),
 			})
 		}
 	}
@@ -213,6 +217,7 @@ type compiler struct {
 	entityLists        map[uint32]struct{}
 	entitySets         map[uint32]struct{}
 	primitiveSets      map[uint32]string
+	nbtVariables       map[uint32]struct{}
 	functionIndexes    map[string]int
 	functionsByName    map[string]*ast.Function
 	imports            map[string]ImportedFunction
@@ -282,6 +287,9 @@ func (c *compiler) applyDeclaredType(variableID uint32, typeName string) {
 	case "str":
 		c.stringVariables[variableID] = struct{}{}
 		c.variableTypes[variableID] = "str"
+	case "nbt":
+		c.nbtVariables[variableID] = struct{}{}
+		c.variableTypes[variableID] = "nbt"
 	case "list":
 		c.listVariables[variableID] = struct{}{}
 		c.variableTypes[variableID] = "list"
@@ -408,7 +416,7 @@ func (c *compiler) collectStatements(statements []ast.Statement, id ast.ScopeID,
 					delete(c.variableTypes, variableID)
 				}
 			}
-			if statement.Index != nil {
+			if statement.Index != nil && !c.isNBT(variableID) {
 				c.listVariables[variableID] = struct{}{}
 			}
 			c.markListUses(statement.Value, id, function)
@@ -480,7 +488,9 @@ func (c *compiler) markListUses(expression ast.Expression, id ast.ScopeID, funct
 	case *ast.Index:
 		if target, ok := expression.Target.(*ast.Identifier); ok {
 			if variableID, found := c.resolve(target.Name, id, function); found {
-				c.listVariables[variableID] = struct{}{}
+				if !c.isNBT(variableID) {
+					c.listVariables[variableID] = struct{}{}
+				}
 			}
 		}
 		c.markListUses(expression.Index, id, function)
@@ -501,7 +511,7 @@ func (c *compiler) markListUses(expression ast.Expression, id ast.ScopeID, funct
 	case *ast.Attribute:
 		if target, ok := expression.Target.(*ast.Identifier); ok {
 			if variableID, found := c.resolve(target.Name, id, function); found {
-				if !c.isEntitySet(variableID) && !c.isPrimitiveSet(variableID) {
+				if !c.isEntitySet(variableID) && !c.isPrimitiveSet(variableID) && !c.isNBT(variableID) {
 					c.listVariables[variableID] = struct{}{}
 				}
 			}
@@ -516,6 +526,11 @@ func (c *compiler) isList(variableID uint32) bool {
 
 func (c *compiler) isString(variableID uint32) bool {
 	_, ok := c.stringVariables[variableID]
+	return ok
+}
+
+func (c *compiler) isNBT(variableID uint32) bool {
+	_, ok := c.nbtVariables[variableID]
 	return ok
 }
 
@@ -764,6 +779,18 @@ func (c *compiler) compileStatements(statements []ast.Statement, id ast.ScopeID,
 				continue
 			}
 			mapping := c.output.FunctionMappings[c.functionIndexes[function.Name]]
+			if mapping.ReturnsNBT {
+				identifier, ok := statement.Value.(*ast.Identifier)
+				if !ok {
+					return nil, Error{Position: statement.Value.Position(), Message: "NBT return currently requires an nbt variable"}
+				}
+				variableID, found := c.resolve(identifier.Name, id, function)
+				if !found || !c.isNBT(variableID) {
+					return nil, Error{Position: identifier.Pos, Message: "return value is not an nbt variable"}
+				}
+				commands = append(commands, fmt.Sprintf("data modify storage %s nbt_returns.r%d set from storage %s nbt.v%d", c.storageName(), mapping.ID, c.storageName(), variableID), "return 0")
+				continue
+			}
 			if mapping.ReturnsEntitySet {
 				compiled, err := c.compileEntitySetExpression(statement.Value, c.entitySetReturnTag(mapping.ID), id, function)
 				if err != nil {
@@ -1126,10 +1153,36 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 		return nil, Error{Position: statement.Pos, Message: fmt.Sprintf("undefined variable %q", statement.Name)}
 	}
 	if statement.Index != nil {
+		if c.isNBT(variableID) {
+			return c.compileNBTFieldAssignment(statement, variableID, id, function)
+		}
 		return c.compileListItemAssignment(statement, variableID, id, function)
 	}
 	if _, none := statement.Value.(*ast.NoneLiteral); none {
 		return c.compileNoneAssignment(variableID), nil
+	}
+	if c.isNBT(variableID) {
+		if statement.Operator != token.Assign {
+			return nil, Error{Position: statement.Pos, Message: "NBT assignment only supports '='"}
+		}
+		if call, ok := statement.Value.(*ast.Call); ok {
+			if calleeName, named := callCallee(call); named {
+				if mapping, _, targetObjective, found := c.callTarget(calleeName); found && mapping.ReturnsNBT {
+					commands, _, err := c.compileCall(call, id, function, false)
+					if err != nil {
+						return nil, err
+					}
+					commands = append(commands, fmt.Sprintf("data modify storage %s nbt.v%d set from storage %s nbt_returns.r%d", c.storageName(), variableID, targetObjective+":data", mapping.ID))
+					return commands, nil
+				}
+			}
+		}
+		return c.compileNBTValueToPath(statement.Value, fmt.Sprintf("nbt.v%d", variableID), id, function)
+	}
+	if indexed, ok := statement.Value.(*ast.Index); ok {
+		if path, sourceNBT, found := c.nbtIndexPath(indexed, id, function); found {
+			return c.compileNBTReadAssignment(variableID, path, sourceNBT), nil
+		}
 	}
 	if c.isEntitySet(variableID) {
 		if statement.Operator != token.Assign {
@@ -1320,11 +1373,132 @@ func (c *compiler) compileNoneAssignment(variableID uint32) []string {
 		}
 	case c.isString(variableID):
 		return []string{fmt.Sprintf("data remove storage %s strings.v%d", storage, variableID)}
+	case c.isNBT(variableID):
+		return []string{fmt.Sprintf("data remove storage %s nbt.v%d", storage, variableID)}
 	case c.variableTypes[variableID] == "entity":
 		return []string{fmt.Sprintf("data remove storage %s entities.v%d", storage, variableID)}
 	default:
 		return []string{fmt.Sprintf("scoreboard players reset %s %s", variableHolder(variableID), c.objective)}
 	}
+}
+
+func (c *compiler) nbtIndexPath(indexed *ast.Index, id ast.ScopeID, function *ast.Function) (string, uint32, bool) {
+	root, indices := compilerIndexedRoot(indexed)
+	if root == nil {
+		return "", 0, false
+	}
+	variableID, found := c.resolve(root.Name, id, function)
+	if !found || !c.isNBT(variableID) {
+		return "", 0, false
+	}
+	path := fmt.Sprintf("nbt.v%d", variableID)
+	for _, index := range indices {
+		key, ok := index.(*ast.String)
+		if !ok {
+			return "", 0, false
+		}
+		encoded, _ := json.Marshal(key.Value)
+		path += "." + string(encoded)
+	}
+	return path, variableID, true
+}
+
+func (c *compiler) compileNBTFieldAssignment(statement *ast.Assignment, variableID uint32, id ast.ScopeID, function *ast.Function) ([]string, error) {
+	if statement.Operator != token.Assign {
+		return nil, Error{Position: statement.Pos, Message: "NBT fields only support '=' assignment"}
+	}
+	path := fmt.Sprintf("nbt.v%d", variableID)
+	indices := statement.Indices
+	if len(indices) == 0 {
+		indices = []ast.Expression{statement.Index}
+	}
+	for _, index := range indices {
+		key, ok := index.(*ast.String)
+		if !ok {
+			return nil, Error{Position: index.Position(), Message: "NBT keys must be string literals"}
+		}
+		encoded, _ := json.Marshal(key.Value)
+		path += "." + string(encoded)
+	}
+	return c.compileNBTValueToPath(statement.Value, path, id, function)
+}
+
+func (c *compiler) compileNBTReadAssignment(variableID uint32, sourcePath string, _ uint32) []string {
+	storage := c.storageName()
+	switch {
+	case c.isNBT(variableID):
+		return []string{fmt.Sprintf("data modify storage %s nbt.v%d set from storage %s %s", storage, variableID, storage, sourcePath)}
+	case c.isString(variableID):
+		return []string{fmt.Sprintf("data modify storage %s strings.v%d set from storage %s %s", storage, variableID, storage, sourcePath)}
+	default:
+		return []string{fmt.Sprintf("execute store result score %s %s run data get storage %s %s 1", variableHolder(variableID), c.objective, storage, sourcePath)}
+	}
+}
+
+func (c *compiler) compileNBTValueToPath(expression ast.Expression, path string, id ast.ScopeID, function *ast.Function) ([]string, error) {
+	storage := c.storageName()
+	switch expression := expression.(type) {
+	case *ast.NBT:
+		commands := []string{fmt.Sprintf("data modify storage %s %s set value {}", storage, path)}
+		for _, field := range expression.Fields {
+			encoded, _ := json.Marshal(field.Key)
+			compiled, err := c.compileNBTValueToPath(field.Value, path+"."+string(encoded), id, function)
+			if err != nil {
+				return nil, err
+			}
+			commands = append(commands, compiled...)
+		}
+		return commands, nil
+	case *ast.Set:
+		if len(expression.Elements) == 0 {
+			return []string{fmt.Sprintf("data modify storage %s %s set value {}", storage, path)}, nil
+		}
+	case *ast.List:
+		commands := []string{fmt.Sprintf("data modify storage %s %s set value []", storage, path)}
+		for _, element := range expression.Elements {
+			commands = append(commands, fmt.Sprintf("data modify storage %s %s append value 0", storage, path))
+			compiled, err := c.compileNBTValueToPath(element, path+"[-1]", id, function)
+			if err != nil {
+				return nil, err
+			}
+			commands = append(commands, compiled...)
+		}
+		return commands, nil
+	case *ast.String:
+		encoded, _ := json.Marshal(expression.Value)
+		return []string{fmt.Sprintf("data modify storage %s %s set value %s", storage, path, encoded)}, nil
+	case *ast.Integer:
+		return []string{fmt.Sprintf("data modify storage %s %s set value %d", storage, path, expression.Value)}, nil
+	case *ast.Boolean:
+		value := 0
+		if expression.Value {
+			value = 1
+		}
+		return []string{fmt.Sprintf("data modify storage %s %s set value %db", storage, path, value)}, nil
+	case *ast.Identifier:
+		variableID, found := c.resolve(expression.Name, id, function)
+		if !found {
+			return nil, Error{Position: expression.Pos, Message: fmt.Sprintf("undefined variable %q", expression.Name)}
+		}
+		source := ""
+		switch {
+		case c.isNBT(variableID):
+			source = fmt.Sprintf("nbt.v%d", variableID)
+		case c.isString(variableID):
+			source = fmt.Sprintf("strings.v%d", variableID)
+		case c.isList(variableID):
+			source = fmt.Sprintf("lists.v%d", variableID)
+		}
+		if source != "" {
+			return []string{fmt.Sprintf("data modify storage %s %s set from storage %s %s", storage, path, storage, source)}, nil
+		}
+		return []string{fmt.Sprintf("execute store result storage %s %s int 1 run scoreboard players get %s %s", storage, path, variableHolder(variableID), c.objective)}, nil
+	case *ast.Index:
+		if source, _, found := c.nbtIndexPath(expression, id, function); found {
+			return []string{fmt.Sprintf("data modify storage %s %s set from storage %s %s", storage, path, storage, source)}, nil
+		}
+	}
+	return nil, Error{Position: expression.Position(), Message: "unsupported NBT value"}
 }
 
 func (c *compiler) compileEntitySetExpression(expression ast.Expression, destination string, id ast.ScopeID, function *ast.Function) ([]string, error) {
@@ -1704,8 +1878,8 @@ func (c *compiler) compileExpression(expression ast.Expression, id ast.ScopeID, 
 
 func (c *compiler) compileTypeTest(expression *ast.Binary, id ast.ScopeID, function *ast.Function) ([]string, value, error) {
 	typeName, ok := expression.Right.(*ast.Identifier)
-	if !ok || (typeName.Name != "bool" && typeName.Name != "int" && typeName.Name != "str" && typeName.Name != "list" && typeName.Name != "entity") {
-		return nil, value{}, Error{Position: expression.Right.Position(), Message: "is expects bool, int, str, list, or entity"}
+	if !ok || (typeName.Name != "bool" && typeName.Name != "int" && typeName.Name != "str" && typeName.Name != "list" && typeName.Name != "entity" && typeName.Name != "nbt") {
+		return nil, value{}, Error{Position: expression.Right.Position(), Message: "is expects bool, int, str, list, entity, or nbt"}
 	}
 	result := c.newTemporary()
 	commands := []string{fmt.Sprintf("scoreboard players set %s %s 0", result.holder, result.objective)}
@@ -1799,6 +1973,8 @@ func (c *compiler) expressionType(expression ast.Expression, id ast.ScopeID, fun
 		return "entity"
 	case *ast.List:
 		return "list"
+	case *ast.NBT:
+		return "nbt"
 	case *ast.Identifier:
 		if variableID, found := c.resolve(expression.Name, id, function); found {
 			if kind := c.variableTypes[variableID]; kind != "" {
@@ -2158,6 +2334,9 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 		if c.isPrimitiveSet(collectionID) {
 			return []string{fmt.Sprintf("execute store result score %s %s run data get storage %s sets.v%d.length 1", result.holder, result.objective, c.storageName(), collectionID)}, result, nil
 		}
+		if c.isNBT(collectionID) {
+			return []string{fmt.Sprintf("execute store result score %s %s run data get storage %s nbt.v%d", result.holder, result.objective, c.storageName(), collectionID)}, result, nil
+		}
 		if !c.isList(collectionID) {
 			return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not a collection", identifier.Name)}
 		}
@@ -2178,6 +2357,19 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 	var commands []string
 	arguments := make([]value, 0, len(call.Arguments))
 	for i, argument := range call.Arguments {
+		if mapping.Parameters[i].IsNBT {
+			identifier, ok := argument.(*ast.Identifier)
+			if !ok {
+				return nil, value{}, Error{Position: argument.Position(), Message: "NBT argument must be an nbt variable"}
+			}
+			sourceID, found := c.resolve(identifier.Name, id, function)
+			if !found || !c.isNBT(sourceID) {
+				return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not an nbt variable", identifier.Name)}
+			}
+			commands = append(commands, fmt.Sprintf("data modify storage %s nbt.v%d set from storage %s nbt.v%d", targetStorage, mapping.Parameters[i].VariableID, c.storageName(), sourceID))
+			arguments = append(arguments, value{})
+			continue
+		}
 		if mapping.Parameters[i].IsPrimitiveSet {
 			identifier, ok := argument.(*ast.Identifier)
 			if !ok {
@@ -2238,7 +2430,7 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 		arguments = append(arguments, stable)
 	}
 	for i, argument := range arguments {
-		if mapping.Parameters[i].IsList || mapping.Parameters[i].IsString || mapping.Parameters[i].IsEntitySet || mapping.Parameters[i].IsPrimitiveSet {
+		if mapping.Parameters[i].IsList || mapping.Parameters[i].IsString || mapping.Parameters[i].IsEntitySet || mapping.Parameters[i].IsPrimitiveSet || mapping.Parameters[i].IsNBT {
 			continue
 		}
 		parameter := value{holder: mapping.Parameters[i].Holder, objective: targetObjective}
@@ -2261,6 +2453,12 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 	if mapping.ReturnsPrimitiveSet {
 		if requireValue {
 			return nil, value{}, Error{Position: call.Pos, Message: fmt.Sprintf("primitive set returned by %q must be assigned to a variable", callee.Name)}
+		}
+		return commands, value{}, nil
+	}
+	if mapping.ReturnsNBT {
+		if requireValue {
+			return nil, value{}, Error{Position: call.Pos, Message: fmt.Sprintf("NBT returned by %q must be assigned to a variable", callee.Name)}
 		}
 		return commands, value{}, nil
 	}
@@ -2562,6 +2760,10 @@ func (c *compiler) compileSay(call *ast.Call, id ast.ScopeID, function *ast.Func
 					components = append(components, fmt.Sprintf("{\"nbt\":\"lists.v%d\",\"storage\":\"%s\"}", variableID, c.storageName()))
 					continue
 				}
+				if c.isNBT(variableID) {
+					components = append(components, fmt.Sprintf("{\"nbt\":\"nbt.v%d\",\"storage\":\"%s\"}", variableID, c.storageName()))
+					continue
+				}
 				if c.isString(variableID) {
 					components = append(components, fmt.Sprintf("{\"nbt\":\"strings.v%d\",\"storage\":\"%s\",\"interpret\":false}", variableID, c.storageName()))
 					continue
@@ -2569,6 +2771,10 @@ func (c *compiler) compileSay(call *ast.Call, id ast.ScopeID, function *ast.Func
 			}
 		}
 		if indexed, ok := argument.(*ast.Index); ok {
+			if sourcePath, _, found := c.nbtIndexPath(indexed, id, function); found {
+				components = append(components, fmt.Sprintf("{\"nbt\":%q,\"storage\":%q}", sourcePath, c.storageName()))
+				continue
+			}
 			root, indices := compilerIndexedRoot(indexed)
 			if root != nil {
 				if variableID, found := c.resolve(root.Name, id, function); found && c.isList(variableID) {

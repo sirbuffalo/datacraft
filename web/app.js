@@ -29,7 +29,7 @@ let latestZIP = null;
 CodeMirror.defineMode('datacraft', () => {
   const keywords = new Set(['version', 'namespace', 'from', 'import', 'expose', 'def', 'global', 'return', 'if', 'elif', 'else', 'for', 'while', 'break', 'continue', 'in', 'is', 'and', 'or', 'not', 'mod', 'const', 'readonly']);
   const deprecated = new Set(['export']);
-  const types = new Set(['int', 'bool', 'str', 'list', 'set', 'entity']);
+  const types = new Set(['int', 'bool', 'str', 'list', 'set', 'entity', 'nbt']);
   const literals = new Set(['True', 'False', 'None']);
   const builtins = new Set(['say', 'len', 'bool', 'str', 'list', 'set', 'is_bool']);
   const methods = new Set(['append', 'insert', 'remove', 'add', 'discard', 'clear']);
@@ -349,8 +349,9 @@ expose def add(a: int, b: int) -> int:
 expose def load():
     values: list[int] = [2, 3, 5]
     result: int = add(values[0], values[1])
+    profile: nbt = {"name": "Alex", "score": result, "flags": [True, False]}
     if result == 5:
-        say("DataCraft example: ", result)
+        say("DataCraft example: ", profile)
     else:
         say("Unexpected result: ", result)
 `;

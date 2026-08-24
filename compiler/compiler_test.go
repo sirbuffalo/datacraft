@@ -899,6 +899,48 @@ def nested(a: list[list[int]], b: list[list[int]]) -> list[list[int]]:
 	}
 }
 
+func TestCompileNBTCompoundsFieldsAndFunctions(t *testing.T) {
+	source := `namespace demo
+
+def identity(value: nbt) -> nbt:
+    return value
+
+def load():
+    data: nbt = {"name": "Alex", "health": 20, "nested": {"active": True}, "mixed": [1, "two"]}
+    data["health"] = 18
+    health: int = data["health"]
+    nested: nbt = data["nested"]
+    copy: nbt = identity(data)
+    say(copy)
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "demo")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		`nbt.v1 set value {}`,
+		`nbt.v1."name" set value "Alex"`,
+		`nbt.v1."nested"."active" set value 1b`,
+		`nbt.v1."mixed" set value []`,
+		`data get storage demo:data nbt.v1."health" 1`,
+		`nbt_returns.r0 set from storage demo:data nbt.v0`,
+		`nbt.v4 set from storage demo:data nbt_returns.r0`,
+		`{"nbt":"nbt.v4","storage":"demo:data"}`,
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing NBT command %q in %#v", wanted, all)
+		}
+	}
+}
+
 func containsSubstring(commands []string, wanted string) bool {
 	for _, command := range commands {
 		if strings.Contains(command, wanted) {

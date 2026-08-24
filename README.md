@@ -20,6 +20,7 @@ expose def load():
 - Required parameter types and statically checked return types
 - Omitted function return annotations default to `None`
 - `int`, `bool`, `str`, `entity`, nullable values, lists, and sets
+- Storage-backed NBT compounds with JSON-style literals and bracket access
 - `if`, `elif`, `else`, `for`, `while`, `break`, and `continue`
 - Internal ID-based functions and stable public wrappers using `expose`
 - Multi-file projects with imports
@@ -106,6 +107,7 @@ Open [http://localhost:8000](http://localhost:8000). The editor runs entirely in
 - [Control flow](docs/04-control-flow.md)
 - [Lists and sets](docs/05-collections.md)
 - [Entities](docs/06-entities.md)
+- [NBT compounds](docs/06-nbt.md)
 - [Built-ins and operators](docs/07-builtins.md)
 - [Raw Minecraft commands](docs/08-commands.md)
 - [CLI and browser projects](docs/09-cli.md)

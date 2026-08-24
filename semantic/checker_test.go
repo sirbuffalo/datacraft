@@ -55,6 +55,35 @@ def invalid():
 `, "function returns int, not None")
 }
 
+func TestNBTCompoundsUseTypedBracketAccess(t *testing.T) {
+	program, err := parser.Parse(`namespace demo
+
+def load():
+    data: nbt = {"name": "Alex", "health": 20, "nested": {"active": True}, "mixed": [1, "two"]}
+    data["health"] = 18
+    health: int = data["health"]
+    nested: nbt = data["nested"]
+    empty: nbt = {}
+    is_compound: bool = data is nbt
+    say(data)
+`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if err = semantic.Check(program); err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+
+	checkError(t, `def bad():
+    data: nbt = {"value": 1}
+    key: str = "value"
+    result: int = data[key]
+`, "NBT keys must be string literals")
+	checkError(t, `def bad():
+    data: nbt = {"missing": None}
+`, "None and entities are not allowed")
+}
+
 func TestVersion2NamespaceGlobalWritesRequireGlobal(t *testing.T) {
 	checkError(t, `namespace strict
 

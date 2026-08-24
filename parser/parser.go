@@ -670,6 +670,27 @@ func (p *parser) parsePrimary() (ast.Expression, error) {
 	}
 	if p.match(token.LeftBrace) {
 		open := p.previous()
+		if p.check(token.String) && p.checkNext(token.Colon) {
+			fields := []ast.NBTField{}
+			for {
+				key, _ := p.consume(token.String, "expected string key in NBT compound")
+				if _, err := p.consume(token.Colon, "expected ':' after NBT key"); err != nil {
+					return nil, err
+				}
+				value, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				fields = append(fields, ast.NBTField{Pos: key.Position, Key: key.Lexeme, Value: value})
+				if !p.match(token.Comma) {
+					break
+				}
+			}
+			if _, err := p.consume(token.RightBrace, "expected '}' after NBT fields"); err != nil {
+				return nil, err
+			}
+			return &ast.NBT{Pos: open.Position, Fields: fields}, nil
+		}
 		elements := []ast.Expression{}
 		if !p.check(token.RightBrace) {
 			for {

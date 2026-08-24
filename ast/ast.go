@@ -231,6 +231,20 @@ type Set struct {
 	Elements []Expression
 }
 
+type NBT struct {
+	Pos    token.Position
+	Fields []NBTField
+}
+
+type NBTField struct {
+	Pos   token.Position
+	Key   string
+	Value Expression
+}
+
+func (*NBT) expression()                {}
+func (e *NBT) Position() token.Position { return e.Pos }
+
 func (*Set) expression()                {}
 func (e *Set) Position() token.Position { return e.Pos }
 

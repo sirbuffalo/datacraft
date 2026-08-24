@@ -1,2 +1,2 @@
-# Project exclude paths
-/web/vendor/
+# Browser dependencies under web/vendor are intentionally committed because the
+# static GitHub Pages build cannot install packages at runtime.

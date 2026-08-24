@@ -10,14 +10,15 @@ import (
 	"sort"
 	"syscall/js"
 
-	"mccomp/datapack"
+	"github.com/sirbuffalo/datacraft/datapack"
 )
 
 type request struct {
-	Source      string `json:"source"`
-	PackName    string `json:"packName"`
-	Description string `json:"description"`
-	PackFormat  int    `json:"packFormat"`
+	Source      string            `json:"source"`
+	Sources     map[string]string `json:"sources,omitempty"`
+	PackName    string            `json:"packName"`
+	Description string            `json:"description"`
+	PackFormat  int               `json:"packFormat"`
 }
 
 type response struct {
@@ -29,7 +30,7 @@ type response struct {
 
 func main() {
 	compile := js.FuncOf(compile)
-	js.Global().Set("mccompCompile", compile)
+	js.Global().Set("datacraftCompile", compile)
 	select {}
 }
 
@@ -41,9 +42,16 @@ func compile(_ js.Value, args []js.Value) any {
 	if err := json.Unmarshal([]byte(args[0].String()), &input); err != nil {
 		return encode(response{Error: "invalid compiler request: " + err.Error()})
 	}
-	pack, err := datapack.Build(input.Source, datapack.Config{
+	config := datapack.Config{
 		PackName: input.PackName, Description: input.Description, PackFormat: input.PackFormat,
-	})
+	}
+	var pack datapack.Pack
+	var err error
+	if len(input.Sources) > 0 {
+		pack, err = datapack.BuildProject(input.Sources, config)
+	} else {
+		pack, err = datapack.Build(input.Source, config)
+	}
 	if err != nil {
 		return encode(response{Error: err.Error()})
 	}

@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/mccomp.iml" filepath="$PROJECT_DIR$/.idea/mccomp.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/datacraft.iml" filepath="$PROJECT_DIR$/.idea/datacraft.iml" />
     </modules>
   </component>
 </project>

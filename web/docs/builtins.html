@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Built-ins — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>Built-ins</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a aria-current="page" href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>Standard operations</h2></div>
+<p>Built-ins compile to scoreboard, storage, text-component, and runtime-helper commands.</p>
+<div class="docs-grid">
+<article><h3>Output</h3>
+<p><code>say(value, ...)</code> joins its arguments into one message. It supports strings, integers, booleans, lists, and expressions.</p>
+</article>
+<article><h3>Conversion</h3>
+<ul>
+<li><code>str(value)</code> converts an integer or boolean to text.</li>
+<li><code>bool(value)</code> returns <code>0</code> for zero, an empty string, or an empty list; otherwise it returns <code>1</code>.</li>
+<li><code>list(value)</code> creates a compatible typed list.</li>
+<li><code>set(value)</code> creates a compatible typed set.</li>
+</ul>
+</article>
+<article><h3>Collection helpers</h3>
+<ul>
+<li><code>len(value)</code> returns a string, list, or set length.</li>
+<li><code>append(value)</code> adds to the end of a list.</li>
+<li><code>insert(index, value)</code> inserts into a list.</li>
+<li><code>remove(index)</code> removes and returns an element; the index defaults to the end.</li>
+</ul>
+</article>
+<article><h3>Operators</h3>
+<p>Arithmetic supports <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, and <code>%</code>. <code>+</code> also joins strings and lists. Set union uses <code>|</code>; set intersection uses <code>&amp;</code>.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

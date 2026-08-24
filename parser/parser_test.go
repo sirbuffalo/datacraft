@@ -3,14 +3,14 @@ package parser_test
 import (
 	"testing"
 
-	"mccomp/ast"
-	"mccomp/parser"
-	"mccomp/token"
+	"github.com/sirbuffalo/datacraft/ast"
+	"github.com/sirbuffalo/datacraft/parser"
+	"github.com/sirbuffalo/datacraft/token"
 )
 
 func TestParseFunctionAndArithmetic(t *testing.T) {
 	source := "namespace demo\n\ndef add(a, b):\n    total = a + b * 2\n    return total\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestParseFunctionAndArithmetic(t *testing.T) {
 
 func TestParseIfAndFor(t *testing.T) {
 	source := "def reward():\n    players = [1, 2, 3]\n    for player in players:\n        if ready(player):\n            give(player, 1)\n        else:\n            /say Player is not ready\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -67,14 +67,14 @@ func TestParseIfAndFor(t *testing.T) {
 }
 
 func TestRejectTabs(t *testing.T) {
-	_, err := parser.Parse("def bad():\n\treturn 1\n")
+	_, err := parser.ParseLegacy("def bad():\n\treturn 1\n")
 	if err == nil {
 		t.Fatal("Parse() error = nil, want indentation error")
 	}
 }
 
 func TestParseGlobalDeclaration(t *testing.T) {
-	program, err := parser.Parse("def update():\n    global counter, timer\n    counter += 1\n")
+	program, err := parser.ParseLegacy("def update():\n    global counter, timer\n    counter += 1\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -87,18 +87,38 @@ func TestParseGlobalDeclaration(t *testing.T) {
 	}
 }
 
-func TestParseExportedFunction(t *testing.T) {
-	program, err := parser.Parse("export def reward(player):\n    return 5\n")
+func TestParseExposedFunction(t *testing.T) {
+	program, err := parser.ParseLegacy("expose def reward(player):\n    return 5\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if len(program.Functions) != 1 || !program.Functions[0].Exported {
-		t.Fatalf("function = %#v, want exported function", program.Functions)
+	if len(program.Functions) != 1 || !program.Functions[0].Exposed {
+		t.Fatalf("function = %#v, want exposed function", program.Functions)
+	}
+}
+
+func TestExportReportsExposeMigration(t *testing.T) {
+	_, err := parser.ParseLegacy("export def reward():\n    return 5\n")
+	if err == nil || err.Error() != "2:1: 'export' was renamed to 'expose'" {
+		t.Fatalf("ParseLegacy() error = %v", err)
+	}
+}
+
+func TestParseImports(t *testing.T) {
+	program, err := parser.Parse("namespace app\n\nfrom math import add, clamp\n\ndef run() -> None:\n    say(add(2, 3))\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(program.Imports) != 1 || program.Imports[0].Namespace != "math" {
+		t.Fatalf("imports = %#v", program.Imports)
+	}
+	if got := program.Imports[0].Names; len(got) != 2 || got[0] != "add" || got[1] != "clamp" {
+		t.Fatalf("imported names = %#v", got)
 	}
 }
 
 func TestParseListIndex(t *testing.T) {
-	program, err := parser.Parse("def read():\n    items = [1, 2, 3]\n    value = items[1]\n")
+	program, err := parser.ParseLegacy("def read():\n    items = [1, 2, 3]\n    value = items[1]\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -113,7 +133,7 @@ func TestParseListIndex(t *testing.T) {
 }
 
 func TestParseTypeTest(t *testing.T) {
-	program, err := parser.Parse("namespace demo\n\ndef test():\n    result = value is bool\n")
+	program, err := parser.ParseLegacy("namespace demo\n\ndef test():\n    result = value is bool\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -125,7 +145,7 @@ func TestParseTypeTest(t *testing.T) {
 }
 
 func TestParseModKeyword(t *testing.T) {
-	program, err := parser.Parse("namespace demo\n\ndef test():\n    result = 14 mod 5\n")
+	program, err := parser.ParseLegacy("namespace demo\n\ndef test():\n    result = 14 mod 5\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -137,7 +157,7 @@ func TestParseModKeyword(t *testing.T) {
 }
 
 func TestParseEntitySelectors(t *testing.T) {
-	program, err := parser.Parse("namespace demo\n\ndef test():\n    target = @s\n    entities = [@s, @e[type=minecraft:pig,limit=1]]\n")
+	program, err := parser.ParseLegacy("namespace demo\n\ndef test():\n    target = @s\n    entities = [@s, @e[type=minecraft:pig,limit=1]]\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -151,8 +171,93 @@ func TestParseEntitySelectors(t *testing.T) {
 	}
 }
 
+func TestParseVersion2TypesConstReadonlySetAndNone(t *testing.T) {
+	source := "version 2\nnamespace strict\n\nconst LIMIT: int = 5\n\ndef inspect(values: readonly list[int], target: entity?) -> None:\n    unique: set[str] = {\"a\", \"b\"}\n    missing: entity? = None\n    for value: str in unique:\n        say(value)\n"
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if program.Version != 2 || len(program.Globals) != 1 || !program.Globals[0].Constant {
+		t.Fatalf("program header/globals = %#v", program)
+	}
+	function := program.Functions[0]
+	if function.ReturnType.String() != "None" || function.Types["values"].String() != "readonly list[int]" || function.Types["target"].String() != "entity?" {
+		t.Fatalf("function types = %#v", function.Types)
+	}
+	declaration := function.Body[0].(*ast.Assignment)
+	if declaration.DeclaredType.String() != "set[str]" {
+		t.Fatalf("declaration type = %s", declaration.DeclaredType.String())
+	}
+	if _, ok := declaration.Value.(*ast.Set); !ok {
+		t.Fatalf("set literal = %T", declaration.Value)
+	}
+}
+
+func TestHeaderlessSourceDefaultsToVersion2(t *testing.T) {
+	program, err := parser.Parse("def identity(value: int) -> int:\n    return value\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if program.Version != 2 {
+		t.Fatalf("version = %d, want 2", program.Version)
+	}
+}
+
+func TestHeaderlessSourceUsesStrictVersion2Grammar(t *testing.T) {
+	_, err := parser.Parse("def legacy(value):\n    return value\n")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want missing type error")
+	}
+}
+
+func TestExplicitVersion1UsesLegacyGrammar(t *testing.T) {
+	program, err := parser.Parse("version 1\ndef legacy(value):\n    return value\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if program.Version != 1 {
+		t.Fatalf("version = %d, want 1", program.Version)
+	}
+}
+
+func TestParseCollectionOperators(t *testing.T) {
+	program, err := parser.Parse("def combine(a: set[int], b: set[int]) -> set[int]:\n    return a | b & a\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	union := program.Functions[0].Body[0].(*ast.Return).Value.(*ast.Binary)
+	if union.Operator != token.Ampersand {
+		t.Fatalf("outer operator = %s, want &", union.Operator)
+	}
+	if left := union.Left.(*ast.Binary); left.Operator != token.Pipe {
+		t.Fatalf("left operator = %s, want |", left.Operator)
+	}
+}
+
+func TestParseEntitySetLiteral(t *testing.T) {
+	program, err := parser.Parse("def nearby() -> set[entity]:\n    entities: set[entity] = {@e[type=minecraft:pig]}\n    return entities\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	literal := program.Functions[0].Body[0].(*ast.Assignment).Value.(*ast.Set)
+	if got := literal.Elements[0].(*ast.EntitySelector).Value; got != "@e[type=minecraft:pig]" {
+		t.Fatalf("selector = %q", got)
+	}
+}
+
+func TestParseDirectEntitySelectorForSet(t *testing.T) {
+	program, err := parser.Parse("def nearby() -> set[entity]:\n    entities: set[entity] = @e[type=minecraft:pig]\n    return entities\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	selector := program.Functions[0].Body[0].(*ast.Assignment).Value.(*ast.EntitySelector)
+	if selector.Value != "@e[type=minecraft:pig]" {
+		t.Fatalf("selector = %q", selector.Value)
+	}
+}
+
 func TestParseListItemAssignment(t *testing.T) {
-	program, err := parser.Parse("def update(index):\n    items = [1, 2]\n    items[0] = 5\n    items[index] = 7\n")
+	program, err := parser.ParseLegacy("def update(index):\n    items = [1, 2]\n    items[0] = 5\n    items[index] = 7\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -167,7 +272,7 @@ func TestParseListItemAssignment(t *testing.T) {
 }
 
 func TestParseForAndWhile(t *testing.T) {
-	program, err := parser.Parse("def loops(items):\n    for item in items:\n        say(item)\n    while True:\n        return 1\n")
+	program, err := parser.ParseLegacy("def loops(items):\n    for item in items:\n        say(item)\n    while True:\n        return 1\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -180,7 +285,7 @@ func TestParseForAndWhile(t *testing.T) {
 }
 
 func TestParseFunctionAndGlobalTypes(t *testing.T) {
-	program, err := parser.Parse("def typed(value: int, text: str, items: list):\n    global title: str, count: int\n    return value\n")
+	program, err := parser.ParseLegacy("def typed(value: int, text: str, items: list):\n    global title: str, count: int\n    return value\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}

@@ -1,3 +1,4 @@
+version 1
 namespace testpack
 
 def add(a, b):
@@ -51,7 +52,7 @@ def get_global():
     return shared
 
 def typed_format(value: int, label: str):
-    joined = label & str(value)
+    joined = label + str(value)
     return joined == "value=5"
 
 def typed_string_global():
@@ -59,7 +60,7 @@ def typed_string_global():
     typed_title = "global"
     return typed_title == "global"
 
-export def run_tests():
+expose def run_tests():
     addition = add(2, 3)
     say("Testing addition: got ", addition, " expected 5")
     subtraction = 9 - 4
@@ -126,7 +127,7 @@ export def run_tests():
     say("Testing string == false: got ", wrong_string, " expected 0")
     different_string = greeting != "world"
     say("Testing string !=: got ", different_string, " expected 1")
-    joined_string = "score=" & str(5)
+    joined_string = "score=" + str(5)
     say("Testing string join and str(int): got ", joined_string, " expected score=5")
     joined_comparison = joined_string == "score=5"
     say("Testing joined string comparison: got ", joined_comparison, " expected 1")
@@ -276,8 +277,8 @@ export def run_tests():
     say("Testing return inside while: got ", return_from_while(), " expected 3")
     say("Testing joined say: got ", 2, "+", 3, " expected 2+3")
     /tellraw @a {"text":"Testing raw command: got 1 expected 1"}
-    say("--- mccomp test pack complete: 94 tests ---")
+    say("--- DataCraft test pack complete: 94 tests ---")
 
 def load():
-    say("--- mccomp test pack starting ---")
+    say("--- DataCraft test pack starting ---")
     run_tests()

@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Types — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>Types</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a aria-current="page" href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>Static types</h2></div>
+<p>DataCraft checks values before generating commands. Function signatures require types; local variable annotations are supported where an explicit declaration is useful.</p>
+<div class="docs-grid">
+<article><h3>Scalar types</h3>
+<ul>
+<li><code>int</code> stores a scoreboard integer.</li>
+<li><code>bool</code> is an integer constrained to <code>0</code> or <code>1</code>.</li>
+<li><code>str</code> stores text in command storage.</li>
+<li><code>entity</code> represents one selected entity.</li>
+<li><code>None</code> represents absence in a nullable type.</li>
+</ul>
+</article>
+<article><h3>Collection types</h3>
+<ul>
+<li><code>list[T]</code> is an ordered storage list.</li>
+<li><code>set[int]</code>, <code>set[bool]</code>, and <code>set[str]</code> use keyed storage objects.</li>
+<li><code>set[entity]</code> uses an entity tag.</li>
+<li>Nested types such as <code>list[set[int]]</code> are supported.</li>
+</ul>
+</article>
+<article><h3>Type tests</h3>
+<p>Use <code>x is int</code>, <code>x is bool</code>, <code>x is str</code>, or <code>x is list</code>. Because boolean is a subset of integer, <code>x is bool</code> specifically checks whether the value is <code>0</code> or <code>1</code>.</p>
+</article>
+<article><h3>Nullable values</h3>
+<p>A nullable type may hold <code>None</code>. Singular entity selection uses <code>@n</code> semantics and a limit of one; a missing match becomes <code>None</code> when the type permits it.</p>
+</article>
+<article><h3>Immutability</h3>
+<p><code>const</code> values are fully immutable. <code>readonly</code> prevents reassignment while allowing the underlying value according to its declared collection rules.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

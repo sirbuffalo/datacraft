@@ -166,7 +166,9 @@ function testpack:_special/string_from_int with storage testpack:data scratch.st
 data remove storage testpack:data scratch.str10
 tellraw @a [{"text":"Testing str(bool): got "},{"nbt":"strings.v43","storage":"testpack:data","interpret":false},{"text":" expected 1"}]
 scoreboard players operation #t50 testpack = #c5 testpack
-data modify storage testpack:data strings.v13 set value "value="
+data modify storage testpack:data scratch.import_string_1 set value "value="
+data modify storage testpack:data strings.v13 set from storage testpack:data scratch.import_string_1
+data remove storage testpack:data scratch.import_string_1
 scoreboard players operation #v12 testpack = #t50 testpack
 function testpack:_10
 tellraw @a [{"text":"Testing typed function inputs: got "},{"score":{"name":"#r10","objective":"testpack"}},{"text":" expected 1"}]
@@ -390,6 +392,7 @@ data modify storage testpack:data lists.v56 append value 0
 data modify storage testpack:data list_types.v56 append value "int"
 execute store result storage testpack:data lists.v56[-1] int 1 run scoreboard players get #c3 testpack
 data modify storage testpack:data lists.v6 set from storage testpack:data lists.v56
+data modify storage testpack:data list_types.v6 set from storage testpack:data list_types.v56
 function testpack:_4
 tellraw @a [{"text":"Testing list read: got "},{"score":{"name":"#r4","objective":"testpack"}},{"text":" expected 1"}]
 execute store result storage testpack:data lists.v56[0] int 1 run scoreboard players get #c5 testpack
@@ -429,8 +432,10 @@ data remove storage testpack:data list_types.v56[-1]
 tellraw @a [{"text":"Testing remove() value: got "},{"nbt":"scratch.say_remove87","storage":"testpack:data"},{"text":" expected 4"}]
 tellraw @a [{"text":"Testing list after removes: got "},{"nbt":"lists.v56","storage":"testpack:data"},{"text":" expected [5,8,9,3]"}]
 data modify storage testpack:data lists.v7 set from storage testpack:data lists.v56
+data modify storage testpack:data list_types.v7 set from storage testpack:data list_types.v56
 function testpack:_5
 data modify storage testpack:data lists.v59 set from storage testpack:data returns.r5
+data modify storage testpack:data list_types.v59 set from storage testpack:data return_types.r5
 tellraw @a [{"text":"Testing list function output: got "},{"nbt":"lists.v59","storage":"testpack:data"},{"text":" expected [5,8,9,3]"}]
 data modify storage testpack:data lists.v60 set value []
 data modify storage testpack:data list_types.v60 set value []
@@ -549,10 +554,11 @@ scoreboard players set #t123 testpack 0
 function testpack:_65
 tellraw @a [{"text":"Testing continue in while/if: got "},{"score":{"name":"#v78","objective":"testpack"}},{"text":" expected 8"}]
 data modify storage testpack:data lists.v8 set from storage testpack:data lists.v65
+data modify storage testpack:data list_types.v8 set from storage testpack:data list_types.v65
 function testpack:_6
 tellraw @a [{"text":"Testing return inside for: got "},{"score":{"name":"#r6","objective":"testpack"}},{"text":" expected 2"}]
 function testpack:_7
 tellraw @a [{"text":"Testing return inside while: got "},{"score":{"name":"#r7","objective":"testpack"}},{"text":" expected 3"}]
 tellraw @a [{"text":"Testing joined say: got "},{"score":{"name":"#c2","objective":"testpack"}},{"text":"+"},{"score":{"name":"#c3","objective":"testpack"}},{"text":" expected 2+3"}]
 tellraw @a {"text":"Testing raw command: got 1 expected 1"}
-tellraw @a [{"text":"--- mccomp test pack complete: 94 tests ---"}]
+tellraw @a [{"text":"--- DataCraft test pack complete: 94 tests ---"}]

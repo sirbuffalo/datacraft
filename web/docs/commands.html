@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Commands — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>Commands</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a href="builtins.html">Built-ins</a><a aria-current="page" href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>Raw Minecraft commands</h2></div>
+<p>A line beginning with <code>/</code> is emitted as a Minecraft command from inside a function.</p>
+<div class="docs-grid">
+<article><h3>Basic command</h3>
+<pre><code>def ignite():
+    /give @s minecraft:tnt 1
+</code></pre>
+<p>The browser editor highlights command names, selectors, resources, and DataCraft expressions.</p>
+</article>
+<article><h3>Interpolation</h3>
+<p>Command interpolation is designed to turn typed values into the representation a command expects. Numeric values become macro inputs and entity values become generated tag selectors.</p>
+</article>
+<article><h3>Safety</h3>
+<p>The type checker rejects interpolation that cannot be represented safely. Generated helper functions clean temporary scoreboard and storage values after their operation.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

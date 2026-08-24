@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"mccomp/datapack"
+	"github.com/sirbuffalo/datacraft/datapack"
 )
 
 func TestBuildDataPack(t *testing.T) {
-	source := "namespace demo\n\ndef load():\n    value = 5\n\ndef tick():\n    value = 1 + 2\n\nexport def reward(amount):\n    return amount + 5\n"
+	source := "version 1\nnamespace demo\n\ndef load():\n    value = 5\n\ndef tick():\n    value = 1 + 2\n\nexpose def reward(amount):\n    return amount + 5\n"
 	pack, err := datapack.Build(source, datapack.Config{PackName: "demo", PackFormat: 48})
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -41,12 +41,12 @@ func TestBuildDataPack(t *testing.T) {
 	}
 	wantWrapper := "$scoreboard players set #v2 demo $(amount)\nreturn run function demo:_2\n"
 	if wrapper := pack.Files["data/demo/function/reward.mcfunction"]; wrapper != wantWrapper {
-		t.Fatalf("export wrapper = %q, want %q", wrapper, wantWrapper)
+		t.Fatalf("expose wrapper = %q, want %q", wrapper, wantWrapper)
 	}
 }
 
 func TestPackNameDoesNotReplaceNamespaceScoreboard(t *testing.T) {
-	pack, err := datapack.Build("namespace logic\n\nexport def value():\n    return 5\n", datapack.Config{PackName: "bundle", PackFormat: 48})
+	pack, err := datapack.Build("version 1\nnamespace logic\n\nexpose def value():\n    return 5\n", datapack.Config{PackName: "bundle", PackFormat: 48})
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}

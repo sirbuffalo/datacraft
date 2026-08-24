@@ -1,6 +1,6 @@
-# mccomp project documentation
+# DataCraft project documentation
 
-`mccomp` is an experimental Python-like language and compiler for Minecraft Java Edition data packs. The compiler is written in Go, keeps its core free of filesystem dependencies so it can compile to WebAssembly, and includes a static browser editor that compiles and downloads data-pack ZIP files locally.
+`DataCraft` is an experimental Python-like language and compiler for Minecraft Java Edition data packs. The compiler is written in Go, keeps its core free of filesystem dependencies so it can compile to WebAssembly, and includes a static browser editor that compiles and downloads data-pack ZIP files locally.
 
 This document records the language and compiler work completed so far.
 
@@ -15,7 +15,7 @@ def add(a: int, b: int):
     total = a + b
     return total
 
-export def announce(value: int):
+expose def announce(value: int):
     say("The value is ", value)
     return value
 ```
@@ -96,12 +96,12 @@ Supported type names are:
 - `list`
 - `entity`
 
-### Exported functions
+### Exposed functions
 
-Prefix a function with `export` to create a public wrapper with its real source name:
+Prefix a function with `expose` to create a Minecraft-callable wrapper with its real source name:
 
 ```python
-export def reward(amount: int):
+expose def reward(amount: int):
     return amount + 5
 ```
 
@@ -479,7 +479,7 @@ The project currently passes native Go tests and a full WebAssembly build.
 The diagnostic source is:
 
 ```text
-examples/testpack/testpack.mccomp
+examples/testpack/testpack.DataCraft
 ```
 
 The generated artifacts are:
@@ -512,3 +512,28 @@ Every diagnostic line prints a `got` value and an `expected` value.
 - Return-type annotations are not implemented.
 
 The strongest next feature is command interpolation that understands value kinds. Numeric expressions can become macro numbers, strings can become macro text, entity objects can become UUID-tag selectors, and entity lists can become selectors using their generated membership tags.
+
+## Version 2 implementation status
+
+The required-typing language is now the default: a file without a version header is parsed as version 2. `version 2` may still be written explicitly. Older untyped source must begin with `version 1` to opt into the legacy grammar.
+
+Implemented frontend and semantic foundations:
+
+- Required function parameter annotations
+- Required function return annotations using `->`
+- Typed local and namespace declarations
+- `const` declarations
+- `readonly list[T]` and `readonly set[T]`
+- Nullable types using `?`
+- Capitalized `None`
+- Homogeneous `list[T]` and `set[T]` types
+- Set literals using `{...}`
+- Typed loop variables
+- Declaration-before-assignment checking
+- Assignment and return compatibility checking
+- Homogeneous collection-element checking
+- Constant and readonly mutation errors
+- Singular entity-selector checking
+- Headerless version-2 default and explicit version-1 compatibility tests
+
+The version-2 semantic checker lives in `semantic/`. Typed namespace globals are lowered into the namespace scoreboard, storage, or entity tags and initialized by the generated load function. Project builds resolve `from namespace import function` declarations in dependency order; any function can be imported while `expose` remains specific to Minecraft-callable wrappers. Minecraft backend lowering for reference-based collections, deep `const`, `freeze`, `thaw`, and typed command interpolation remains future work.

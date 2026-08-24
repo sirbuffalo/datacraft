@@ -1,4 +1,4 @@
-# mccomp Minecraft test pack
+# DataCraft Minecraft test pack
 
 Install the generated `build/testpack` folder in a world's `datapacks` folder,
 then enter or reload the world. The pack runs automatically from its load

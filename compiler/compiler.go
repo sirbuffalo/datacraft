@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"mccomp/ast"
-	"mccomp/compiler/scope"
-	"mccomp/token"
+	"github.com/sirbuffalo/datacraft/ast"
+	"github.com/sirbuffalo/datacraft/compiler/scope"
+	"github.com/sirbuffalo/datacraft/semantic"
+	"github.com/sirbuffalo/datacraft/token"
 )
 
 type Variable struct {
@@ -21,22 +22,33 @@ type Variable struct {
 }
 
 type Function struct {
-	ID            uint32
-	Name          string
-	GeneratedName string
-	Exported      bool
-	Parameters    []Parameter
-	ReturnsValue  bool
-	ReturnsList   bool
-	ReturnHolder  string
+	ID                  uint32
+	Name                string
+	GeneratedName       string
+	Exposed             bool
+	Parameters          []Parameter
+	ReturnsValue        bool
+	ReturnsList         bool
+	ReturnsEntitySet    bool
+	ReturnsPrimitiveSet bool
+	ReturnHolder        string
 }
 
 type Parameter struct {
-	Name       string
-	VariableID uint32
-	Holder     string
-	IsList     bool
-	IsString   bool
+	Name           string
+	VariableID     uint32
+	Holder         string
+	IsList         bool
+	IsString       bool
+	IsEntitySet    bool
+	IsPrimitiveSet bool
+}
+
+type ImportedFunction struct {
+	Namespace  string
+	Objective  string
+	Definition *ast.Function
+	Mapping    Function
 }
 
 type Output struct {
@@ -63,6 +75,17 @@ func (e Error) Error() string {
 // scoreboard. It only consumes and returns in-memory values, so it is safe for
 // js/wasm.
 func Compile(program *ast.Program, functionNamespace string) (Output, error) {
+	return CompileWithImports(program, functionNamespace, nil)
+}
+
+func CompileWithImports(program *ast.Program, functionNamespace string, imports map[string]ImportedFunction) (Output, error) {
+	importedDefinitions := make(map[string]*ast.Function, len(imports))
+	for name, imported := range imports {
+		importedDefinitions[name] = imported.Definition
+	}
+	if err := semantic.CheckWithImports(program, importedDefinitions); err != nil {
+		return Output{}, err
+	}
 	objective := program.Namespace
 	if objective == "" {
 		objective = functionNamespace
@@ -84,14 +107,22 @@ func Compile(program *ast.Program, functionNamespace string) (Output, error) {
 		variantVariables:  make(map[uint32]struct{}),
 		entityVariables:   make(map[uint32]struct{}),
 		entityLists:       make(map[uint32]struct{}),
+		entitySets:        make(map[uint32]struct{}),
+		primitiveSets:     make(map[uint32]string),
 		functionIndexes:   make(map[string]int),
 		functionsByName:   make(map[string]*ast.Function),
+		imports:           imports,
 		output: Output{
 			Functions:      make(map[string][]string),
 			FunctionNames:  make(map[string]string),
 			ScoreboardName: objective,
 		},
 	}
+	globalStatements := make([]ast.Statement, len(program.Globals))
+	for index, declaration := range program.Globals {
+		globalStatements[index] = declaration
+	}
+	c.collectStatements(globalStatements, program.ScopeID, nil)
 
 	for id, function := range program.Functions {
 		if _, exists := c.output.FunctionNames[function.Name]; exists {
@@ -103,7 +134,7 @@ func Compile(program *ast.Program, functionNamespace string) (Output, error) {
 		c.functionsByName[function.Name] = function
 		c.output.FunctionMappings = append(c.output.FunctionMappings, Function{
 			ID: uint32(id), Name: function.Name, GeneratedName: generatedName,
-			Exported: function.Exported, ReturnsValue: functionReturnsValue(function.Body),
+			Exposed: function.Exposed, ReturnsValue: functionReturnsValue(function.Body),
 			ReturnHolder: returnHolder(uint32(id)),
 		})
 	}
@@ -114,6 +145,8 @@ func Compile(program *ast.Program, functionNamespace string) (Output, error) {
 	for _, function := range program.Functions {
 		mapping := &c.output.FunctionMappings[c.functionIndexes[function.Name]]
 		mapping.ReturnsList = c.functionReturnsList(function)
+		mapping.ReturnsEntitySet = isEntitySetType(function.ReturnType)
+		mapping.ReturnsPrimitiveSet = isPrimitiveSetType(function.ReturnType)
 	}
 	for range program.Functions {
 		for _, function := range program.Functions {
@@ -128,7 +161,7 @@ func Compile(program *ast.Program, functionNamespace string) (Output, error) {
 		for _, name := range function.Parameters {
 			variableID := c.declared[function.ScopeID][name]
 			mapping.Parameters = append(mapping.Parameters, Parameter{
-				Name: name, VariableID: variableID, Holder: variableHolder(variableID), IsList: c.isList(variableID), IsString: c.isString(variableID),
+				Name: name, VariableID: variableID, Holder: variableHolder(variableID), IsList: c.isList(variableID), IsString: c.isString(variableID), IsEntitySet: c.isEntitySet(variableID), IsPrimitiveSet: c.isPrimitiveSet(variableID),
 			})
 		}
 	}
@@ -147,6 +180,13 @@ func Compile(program *ast.Program, functionNamespace string) (Output, error) {
 		commands = append(commands, compiled...)
 		c.output.Functions[c.output.FunctionNames[function.Name]] = commands
 	}
+	for _, declaration := range program.Globals {
+		compiled, err := c.compileAssignment(declaration, program.ScopeID, nil)
+		if err != nil {
+			return Output{}, err
+		}
+		c.globalInitializers = append(c.globalInitializers, compiled...)
+	}
 	register := c.ensureEntityRuntime()
 	registerAll := c.specialFunction("entity_register_all", []string{fmt.Sprintf("execute as @e run function %s:%s", c.functionNamespace, register)})
 	c.output.Tick = []string{fmt.Sprintf("function %s:%s", c.functionNamespace, registerAll)}
@@ -156,29 +196,33 @@ func Compile(program *ast.Program, functionNamespace string) (Output, error) {
 }
 
 type compiler struct {
-	functionNamespace string
-	objective         string
-	scopes            scope.Result
-	constants         map[int64]struct{}
-	declared          map[ast.ScopeID]map[string]uint32
-	globals           map[*ast.Function]map[string]struct{}
-	globalTypes       map[*ast.Function]map[string]string
-	listVariables     map[uint32]struct{}
-	listDepth         map[uint32]int
-	stringVariables   map[uint32]struct{}
-	variableTypes     map[uint32]string
-	listElementTypes  map[uint32][]string
-	variantVariables  map[uint32]struct{}
-	entityVariables   map[uint32]struct{}
-	entityLists       map[uint32]struct{}
-	functionIndexes   map[string]int
-	functionsByName   map[string]*ast.Function
-	nextVariable      uint32
-	nextFunctionID    uint32
-	temporary         uint64
-	stringTemporary   uint64
-	entityTemporary   uint64
-	output            Output
+	functionNamespace  string
+	objective          string
+	scopes             scope.Result
+	constants          map[int64]struct{}
+	declared           map[ast.ScopeID]map[string]uint32
+	globals            map[*ast.Function]map[string]struct{}
+	globalTypes        map[*ast.Function]map[string]string
+	listVariables      map[uint32]struct{}
+	listDepth          map[uint32]int
+	stringVariables    map[uint32]struct{}
+	variableTypes      map[uint32]string
+	listElementTypes   map[uint32][]string
+	variantVariables   map[uint32]struct{}
+	entityVariables    map[uint32]struct{}
+	entityLists        map[uint32]struct{}
+	entitySets         map[uint32]struct{}
+	primitiveSets      map[uint32]string
+	functionIndexes    map[string]int
+	functionsByName    map[string]*ast.Function
+	imports            map[string]ImportedFunction
+	nextVariable       uint32
+	nextFunctionID     uint32
+	temporary          uint64
+	stringTemporary    uint64
+	entityTemporary    uint64
+	globalInitializers []string
+	output             Output
 }
 
 type value struct {
@@ -197,7 +241,11 @@ func (c *compiler) collectFunction(function *ast.Function) {
 	}
 	for _, parameter := range function.Parameters {
 		variableID := c.declare(function.ScopeID, parameter)
-		c.applyDeclaredType(variableID, function.ParameterTypes[parameter])
+		if ref := function.Types[parameter]; ref != nil {
+			c.applyTypeRef(variableID, ref)
+		} else {
+			c.applyDeclaredType(variableID, function.ParameterTypes[parameter])
+		}
 	}
 	c.collectStatements(function.Body, function.ScopeID, function)
 }
@@ -246,6 +294,27 @@ func (c *compiler) applyDeclaredType(variableID uint32, typeName string) {
 	}
 }
 
+func (c *compiler) applyTypeRef(variableID uint32, ref *ast.TypeRef) {
+	if ref == nil {
+		return
+	}
+	if ref.Name == "set" && ref.Element != nil && ref.Element.Name == "entity" {
+		c.entitySets[variableID] = struct{}{}
+		c.variableTypes[variableID] = "set"
+		return
+	}
+	if ref.Name == "set" && ref.Element != nil && (ref.Element.Name == "int" || ref.Element.Name == "bool" || ref.Element.Name == "str") {
+		c.primitiveSets[variableID] = ref.Element.Name
+		c.variableTypes[variableID] = "set"
+		return
+	}
+	if ref.Name == "list" && ref.Element != nil && ref.Element.Name == "entity" {
+		c.entityLists[variableID] = struct{}{}
+		c.listElementTypes[variableID] = []string{"entity"}
+	}
+	c.applyDeclaredType(variableID, ref.Name)
+}
+
 func (c *compiler) collectStatements(statements []ast.Statement, id ast.ScopeID, function *ast.Function) {
 	c.ensureScope(id)
 	for _, statement := range statements {
@@ -259,6 +328,7 @@ func (c *compiler) collectStatements(statements []ast.Statement, id ast.ScopeID,
 			if !exists {
 				variableID = c.declare(targetScope, statement.Name)
 			}
+			c.applyTypeRef(variableID, statement.DeclaredType)
 			if _, list := statement.Value.(*ast.List); list {
 				c.listVariables[variableID] = struct{}{}
 				c.variableTypes[variableID] = "list"
@@ -362,6 +432,19 @@ func (c *compiler) collectStatements(statements []ast.Statement, id ast.ScopeID,
 			mixedList := false
 			if iterable, ok := statement.Iterable.(*ast.Identifier); ok {
 				if variableID, found := c.resolve(iterable.Name, id, function); found {
+					if c.isEntitySet(variableID) {
+						loopID := c.declare(statement.ScopeID, statement.Variable)
+						c.entityVariables[loopID] = struct{}{}
+						c.variableTypes[loopID] = "entity"
+						c.collectStatements(statement.Body, statement.ScopeID, function)
+						continue
+					}
+					if c.isPrimitiveSet(variableID) {
+						loopID := c.declare(statement.ScopeID, statement.Variable)
+						c.applyTypeRef(loopID, statement.VariableType)
+						c.collectStatements(statement.Body, statement.ScopeID, function)
+						continue
+					}
 					c.listVariables[variableID] = struct{}{}
 					mixedList = true
 					allEntities := len(c.listElementTypes[variableID]) > 0
@@ -418,7 +501,9 @@ func (c *compiler) markListUses(expression ast.Expression, id ast.ScopeID, funct
 	case *ast.Attribute:
 		if target, ok := expression.Target.(*ast.Identifier); ok {
 			if variableID, found := c.resolve(target.Name, id, function); found {
-				c.listVariables[variableID] = struct{}{}
+				if !c.isEntitySet(variableID) && !c.isPrimitiveSet(variableID) {
+					c.listVariables[variableID] = struct{}{}
+				}
 			}
 		}
 	}
@@ -432,6 +517,54 @@ func (c *compiler) isList(variableID uint32) bool {
 func (c *compiler) isString(variableID uint32) bool {
 	_, ok := c.stringVariables[variableID]
 	return ok
+}
+
+func (c *compiler) isEntitySet(variableID uint32) bool {
+	_, ok := c.entitySets[variableID]
+	return ok
+}
+
+func isEntitySetType(ref *ast.TypeRef) bool {
+	return ref != nil && ref.Name == "set" && ref.Element != nil && ref.Element.Name == "entity"
+}
+
+func (c *compiler) isPrimitiveSet(variableID uint32) bool {
+	_, ok := c.primitiveSets[variableID]
+	return ok
+}
+
+func isPrimitiveSetType(ref *ast.TypeRef) bool {
+	return ref != nil && ref.Name == "set" && ref.Element != nil && (ref.Element.Name == "int" || ref.Element.Name == "bool" || ref.Element.Name == "str")
+}
+
+func (c *compiler) entitySetTag(variableID uint32) string {
+	return fmt.Sprintf("_%s_set_%d", c.objective, variableID)
+}
+
+func (c *compiler) entitySetReturnTag(functionID uint32) string {
+	return fmt.Sprintf("_%s_return_set_%d", c.objective, functionID)
+}
+
+func entitySetTagFor(objective string, variableID uint32) string {
+	return fmt.Sprintf("_%s_set_%d", objective, variableID)
+}
+
+func entitySetReturnTagFor(objective string, functionID uint32) string {
+	return fmt.Sprintf("_%s_return_set_%d", objective, functionID)
+}
+
+func (c *compiler) callTarget(name string) (Function, string, string, bool) {
+	if index, ok := c.functionIndexes[name]; ok {
+		return c.output.FunctionMappings[index], c.functionNamespace, c.objective, true
+	}
+	if imported, ok := c.imports[name]; ok {
+		objective := imported.Objective
+		if objective == "" {
+			objective = imported.Namespace
+		}
+		return imported.Mapping, imported.Namespace, objective, true
+	}
+	return Function{}, "", "", false
 }
 
 func (c *compiler) functionReturnsList(function *ast.Function) bool {
@@ -630,11 +763,33 @@ func (c *compiler) compileStatements(statements []ast.Statement, id ast.ScopeID,
 				commands = append(commands, "return 0")
 				continue
 			}
+			mapping := c.output.FunctionMappings[c.functionIndexes[function.Name]]
+			if mapping.ReturnsEntitySet {
+				compiled, err := c.compileEntitySetExpression(statement.Value, c.entitySetReturnTag(mapping.ID), id, function)
+				if err != nil {
+					return nil, err
+				}
+				commands = append(commands, compiled...)
+				commands = append(commands, "return 0")
+				continue
+			}
+			if mapping.ReturnsPrimitiveSet {
+				identifier, ok := statement.Value.(*ast.Identifier)
+				if !ok {
+					return nil, Error{Position: statement.Value.Position(), Message: "primitive set return currently requires a set variable"}
+				}
+				setID, found := c.resolve(identifier.Name, id, function)
+				if !found || !c.isPrimitiveSet(setID) {
+					return nil, Error{Position: identifier.Pos, Message: "return value is not a primitive set"}
+				}
+				commands = append(commands, fmt.Sprintf("data modify storage %s set_returns.r%d set from storage %s sets.v%d", c.storageName(), mapping.ID, c.storageName(), setID), "return 0")
+				continue
+			}
 			if identifier, ok := statement.Value.(*ast.Identifier); ok {
 				if variableID, found := c.resolve(identifier.Name, id, function); found && c.isList(variableID) {
-					mapping := c.output.FunctionMappings[c.functionIndexes[function.Name]]
 					c.constants[int64(variableID)] = struct{}{}
 					commands = append(commands, fmt.Sprintf("data modify storage %s returns.r%d set from storage %s lists.v%d", c.storageName(), mapping.ID, c.storageName(), variableID))
+					commands = append(commands, fmt.Sprintf("data modify storage %s return_types.r%d set from storage %s list_types.v%d", c.storageName(), mapping.ID, c.storageName(), variableID))
 					returned := value{holder: mapping.ReturnHolder, objective: c.objective}
 					commands = append(commands, scoreboardOperation(returned, "=", value{holder: constantHolder(int64(variableID)), objective: c.objective}))
 					commands = append(commands, fmt.Sprintf("return run scoreboard players get %s %s", returned.holder, returned.objective))
@@ -646,7 +801,6 @@ func (c *compiler) compileStatements(statements []ast.Statement, id ast.ScopeID,
 				return nil, err
 			}
 			commands = append(commands, compiled...)
-			mapping := c.output.FunctionMappings[c.functionIndexes[function.Name]]
 			returned := value{holder: mapping.ReturnHolder, objective: c.objective}
 			commands = append(commands, scoreboardOperation(returned, "=", result))
 			commands = append(commands, fmt.Sprintf("return run scoreboard players get %s %s", returned.holder, returned.objective))
@@ -715,11 +869,20 @@ func (c *compiler) compileIf(statement *ast.If, parentID ast.ScopeID, function *
 
 func (c *compiler) compileFor(statement *ast.For, parentID ast.ScopeID, function *ast.Function, returnSignal *value) ([]string, error) {
 	if identifier, ok := statement.Iterable.(*ast.Identifier); ok {
-		listID, found := c.resolve(identifier.Name, parentID, function)
-		if !found || !c.isList(listID) {
-			return nil, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not a list", identifier.Name)}
+		collectionID, found := c.resolve(identifier.Name, parentID, function)
+		if !found {
+			return nil, Error{Position: identifier.Pos, Message: fmt.Sprintf("undefined collection %q", identifier.Name)}
 		}
-		return c.compileListFor(statement, listID, function, returnSignal)
+		if c.isEntitySet(collectionID) {
+			return c.compileEntitySetFor(statement, collectionID, function, returnSignal)
+		}
+		if c.isPrimitiveSet(collectionID) {
+			return c.compilePrimitiveSetFor(statement, collectionID, function, returnSignal)
+		}
+		if !c.isList(collectionID) {
+			return nil, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not iterable", identifier.Name)}
+		}
+		return c.compileListFor(statement, collectionID, function, returnSignal)
 	}
 	if call, ok := statement.Iterable.(*ast.Call); ok {
 		if name, named := callCallee(call); named && name == "range" {
@@ -727,6 +890,36 @@ func (c *compiler) compileFor(statement *ast.For, parentID ast.ScopeID, function
 		}
 	}
 	return nil, Error{Position: statement.Iterable.Position(), Message: "for loops support list variables and range(...)"}
+}
+
+func (c *compiler) compileEntitySetFor(statement *ast.For, setID uint32, function *ast.Function, returnSignal *value) ([]string, error) {
+	loopVariableID, ok := c.resolve(statement.Variable, statement.ScopeID, function)
+	if !ok {
+		return nil, Error{Position: statement.Pos, Message: "undefined loop variable"}
+	}
+	c.entityVariables[loopVariableID] = struct{}{}
+	c.variableTypes[loopVariableID] = "entity"
+	bodyName := c.reserveInternalFunction()
+	runnerName := c.reserveInternalFunction()
+	breakSignal := c.newTemporary()
+	continueSignal := c.newTemporary()
+	body, err := c.compileStatements(statement.Body, statement.ScopeID, function, returnSignal, &breakSignal, &continueSignal)
+	if err != nil {
+		return nil, err
+	}
+	c.output.Functions[bodyName] = body
+	capture := c.compileEntityCapture("@s", fmt.Sprintf("entities.v%d", loopVariableID))
+	runner := append([]string{}, capture...)
+	runner = append(runner, "function "+c.functionNamespace+":"+bodyName)
+	runner = appendReturnPropagation(runner, returnSignal, c.functionReturnValue(function))
+	c.output.Functions[runnerName] = runner
+	commands := []string{
+		fmt.Sprintf("scoreboard players set %s %s 0", breakSignal.holder, breakSignal.objective),
+		fmt.Sprintf("scoreboard players set %s %s 0", continueSignal.holder, continueSignal.objective),
+		fmt.Sprintf("execute as @e[tag=%s] if score %s %s matches 0 run function %s:%s", c.entitySetTag(setID), breakSignal.holder, breakSignal.objective, c.functionNamespace, runnerName),
+	}
+	commands = appendReturnPropagation(commands, returnSignal, c.functionReturnValue(function))
+	return commands, nil
 }
 
 func (c *compiler) compileListFor(statement *ast.For, listID uint32, function *ast.Function, returnSignal *value) ([]string, error) {
@@ -935,6 +1128,44 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 	if statement.Index != nil {
 		return c.compileListItemAssignment(statement, variableID, id, function)
 	}
+	if _, none := statement.Value.(*ast.NoneLiteral); none {
+		return c.compileNoneAssignment(variableID), nil
+	}
+	if c.isEntitySet(variableID) {
+		if statement.Operator != token.Assign {
+			return nil, Error{Position: statement.Pos, Message: "entity-set assignment only supports '='"}
+		}
+		if call, ok := statement.Value.(*ast.Call); ok {
+			if calleeName, named := callCallee(call); named {
+				if mapping, _, targetObjective, found := c.callTarget(calleeName); found && mapping.ReturnsEntitySet {
+					commands, _, err := c.compileCall(call, id, function, false)
+					if err != nil {
+						return nil, err
+					}
+					destination := c.entitySetTag(variableID)
+					source := entitySetReturnTagFor(targetObjective, mapping.ID)
+					commands = append(commands,
+						fmt.Sprintf("tag @e[tag=%s] remove %s", destination, destination),
+						fmt.Sprintf("tag @e[tag=%s] add %s", source, destination),
+					)
+					return commands, nil
+				}
+			}
+		}
+		return c.compileEntitySetExpression(statement.Value, c.entitySetTag(variableID), id, function)
+	}
+	if c.isPrimitiveSet(variableID) {
+		if statement.Operator != token.Assign {
+			return nil, Error{Position: statement.Pos, Message: "set assignment only supports '='"}
+		}
+		return c.compilePrimitiveSetAssignment(statement.Value, variableID, id, function)
+	}
+	if c.isList(variableID) {
+		binary, binaryValue := statement.Value.(*ast.Binary)
+		if statement.Operator == token.PlusAssign || (binaryValue && binary.Operator == token.Plus) {
+			return c.compileListConcatenationAssignment(statement, variableID, id, function)
+		}
+	}
 	if selector, ok := statement.Value.(*ast.EntitySelector); ok {
 		if statement.Operator != token.Assign {
 			return nil, Error{Position: statement.Pos, Message: "entity assignment only supports '='"}
@@ -1037,7 +1268,7 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 	}
 	if call, ok := statement.Value.(*ast.Call); ok {
 		if calleeName, named := callCallee(call); named {
-			if calleeIndex, found := c.functionIndexes[calleeName]; found && c.output.FunctionMappings[calleeIndex].ReturnsList {
+			if mapping, _, targetObjective, found := c.callTarget(calleeName); found && mapping.ReturnsList {
 				if statement.Operator != token.Assign {
 					return nil, Error{Position: statement.Pos, Message: "list return values only support '=' assignment"}
 				}
@@ -1045,7 +1276,9 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 				if err != nil {
 					return nil, err
 				}
-				commands = append(commands, fmt.Sprintf("data modify storage %s lists.v%d set from storage %s returns.r%d", c.storageName(), variableID, c.storageName(), calleeIndex))
+				targetStorage := targetObjective + ":data"
+				commands = append(commands, fmt.Sprintf("data modify storage %s lists.v%d set from storage %s returns.r%d", c.storageName(), variableID, targetStorage, mapping.ID))
+				commands = append(commands, fmt.Sprintf("data modify storage %s list_types.v%d set from storage %s return_types.r%d", c.storageName(), variableID, targetStorage, mapping.ID))
 				return commands, nil
 			}
 		}
@@ -1070,6 +1303,94 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 	}[statement.Operator]
 	commands = append(commands, scoreboardOperation(target, operation, right))
 	return commands, nil
+}
+
+func (c *compiler) compileNoneAssignment(variableID uint32) []string {
+	storage := c.storageName()
+	switch {
+	case c.isEntitySet(variableID):
+		tag := c.entitySetTag(variableID)
+		return []string{fmt.Sprintf("tag @e[tag=%s] remove %s", tag, tag)}
+	case c.isPrimitiveSet(variableID):
+		return []string{fmt.Sprintf("data remove storage %s sets.v%d", storage, variableID)}
+	case c.isList(variableID):
+		return []string{
+			fmt.Sprintf("data remove storage %s lists.v%d", storage, variableID),
+			fmt.Sprintf("data remove storage %s list_types.v%d", storage, variableID),
+		}
+	case c.isString(variableID):
+		return []string{fmt.Sprintf("data remove storage %s strings.v%d", storage, variableID)}
+	case c.variableTypes[variableID] == "entity":
+		return []string{fmt.Sprintf("data remove storage %s entities.v%d", storage, variableID)}
+	default:
+		return []string{fmt.Sprintf("scoreboard players reset %s %s", variableHolder(variableID), c.objective)}
+	}
+}
+
+func (c *compiler) compileEntitySetExpression(expression ast.Expression, destination string, id ast.ScopeID, function *ast.Function) ([]string, error) {
+	switch expression := expression.(type) {
+	case *ast.EntitySelector:
+		return []string{
+			fmt.Sprintf("tag @e[tag=%s] remove %s", destination, destination),
+			fmt.Sprintf("tag %s add %s", expression.Value, destination),
+		}, nil
+	case *ast.Identifier:
+		variableID, found := c.resolve(expression.Name, id, function)
+		if !found || !c.isEntitySet(variableID) {
+			return nil, Error{Position: expression.Pos, Message: fmt.Sprintf("%q is not an entity set", expression.Name)}
+		}
+		source := c.entitySetTag(variableID)
+		if source == destination {
+			return nil, nil
+		}
+		return []string{
+			fmt.Sprintf("tag @e[tag=%s] remove %s", destination, destination),
+			fmt.Sprintf("tag @e[tag=%s] add %s", source, destination),
+		}, nil
+	case *ast.Set:
+		commands := []string{fmt.Sprintf("tag @e[tag=%s] remove %s", destination, destination)}
+		for _, element := range expression.Elements {
+			selector, ok := element.(*ast.EntitySelector)
+			if !ok {
+				return nil, Error{Position: element.Position(), Message: "entity-set literals currently require entity selectors"}
+			}
+			commands = append(commands, fmt.Sprintf("tag %s add %s", selector.Value, destination))
+		}
+		return commands, nil
+	case *ast.Binary:
+		if expression.Operator != token.Pipe && expression.Operator != token.Ampersand {
+			return nil, Error{Position: expression.Pos, Message: "entity sets only support | and &"}
+		}
+		leftTag := fmt.Sprintf("_%s_set_tmp_%d", c.objective, c.entityTemporary)
+		c.entityTemporary++
+		rightTag := fmt.Sprintf("_%s_set_tmp_%d", c.objective, c.entityTemporary)
+		c.entityTemporary++
+		left, err := c.compileEntitySetExpression(expression.Left, leftTag, id, function)
+		if err != nil {
+			return nil, err
+		}
+		right, err := c.compileEntitySetExpression(expression.Right, rightTag, id, function)
+		if err != nil {
+			return nil, err
+		}
+		commands := append(left, right...)
+		commands = append(commands, fmt.Sprintf("tag @e[tag=%s] remove %s", destination, destination))
+		if expression.Operator == token.Pipe {
+			commands = append(commands,
+				fmt.Sprintf("tag @e[tag=%s] add %s", leftTag, destination),
+				fmt.Sprintf("tag @e[tag=%s] add %s", rightTag, destination),
+			)
+		} else {
+			commands = append(commands, fmt.Sprintf("tag @e[tag=%s,tag=%s] add %s", leftTag, rightTag, destination))
+		}
+		commands = append(commands,
+			fmt.Sprintf("tag @e[tag=%s] remove %s", leftTag, leftTag),
+			fmt.Sprintf("tag @e[tag=%s] remove %s", rightTag, rightTag),
+		)
+		return commands, nil
+	default:
+		return nil, Error{Position: expression.Position(), Message: "expected an entity-set expression"}
+	}
 }
 
 func (c *compiler) compileListItemAssignment(statement *ast.Assignment, variableID uint32, id ast.ScopeID, function *ast.Function) ([]string, error) {
@@ -1371,6 +1692,9 @@ func (c *compiler) compileExpression(expression ast.Expression, id ast.ScopeID, 
 		if expression.Operator == token.Is {
 			return c.compileTypeTest(expression, id, function)
 		}
+		if expression.Operator == token.In {
+			return c.compileEntitySetMembership(expression, id, function)
+		}
 		return c.compileBinary(expression, id, function)
 	case *ast.Call:
 		return c.compileCall(expression, id, function, true)
@@ -1499,7 +1823,7 @@ func (c *compiler) expressionType(expression ast.Expression, id ast.ScopeID, fun
 		}
 		return "int"
 	case *ast.Binary:
-		if expression.Operator == token.Ampersand {
+		if expression.Operator == token.Plus && c.isStringExpression(expression.Left, id, function) && c.isStringExpression(expression.Right, id, function) {
 			return "str"
 		}
 		return "int"
@@ -1629,7 +1953,7 @@ func (c *compiler) isStringExpression(expression ast.Expression, id ast.ScopeID,
 	if _, ok := expression.(*ast.Index); ok {
 		return c.expressionType(expression, id, function) == "str"
 	}
-	if binary, ok := expression.(*ast.Binary); ok && binary.Operator == token.Ampersand {
+	if binary, ok := expression.(*ast.Binary); ok && binary.Operator == token.Plus {
 		return c.isStringExpression(binary.Left, id, function) && c.isStringExpression(binary.Right, id, function)
 	}
 	if call, ok := expression.(*ast.Call); ok {
@@ -1693,7 +2017,7 @@ func (c *compiler) compileStringExpressionToPath(expression ast.Expression, path
 		commands = append(commands, fmt.Sprintf("data remove storage %s %s", c.storageName(), base))
 		return commands, nil
 	case *ast.Binary:
-		if expression.Operator != token.Ampersand {
+		if expression.Operator != token.Plus {
 			break
 		}
 		temporaryID := c.stringTemporary
@@ -1789,6 +2113,14 @@ func (c *compiler) compileBool(call *ast.Call, id ast.ScopeID, function *ast.Fun
 
 func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Function, requireValue bool) ([]string, value, error) {
 	if attribute, ok := call.Callee.(*ast.Attribute); ok {
+		if identifier, targetOK := attribute.Target.(*ast.Identifier); targetOK {
+			if variableID, found := c.resolve(identifier.Name, id, function); found && c.isEntitySet(variableID) {
+				return c.compileEntitySetMethod(call, attribute, variableID, id, function, requireValue)
+			}
+			if variableID, found := c.resolve(identifier.Name, id, function); found && c.isPrimitiveSet(variableID) {
+				return c.compilePrimitiveSetMethod(call, attribute, variableID, id, function, requireValue)
+			}
+		}
 		return c.compileListMethod(call, attribute, id, function, requireValue)
 	}
 	callee, ok := call.Callee.(*ast.Identifier)
@@ -1812,18 +2144,30 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 		if !ok {
 			return nil, value{}, Error{Position: call.Pos, Message: "len expects a list variable"}
 		}
-		listID, found := c.resolve(identifier.Name, id, function)
-		if !found || !c.isList(listID) {
-			return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not a list", identifier.Name)}
+		collectionID, found := c.resolve(identifier.Name, id, function)
+		if !found {
+			return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("undefined collection %q", identifier.Name)}
 		}
 		result := c.newTemporary()
-		return []string{fmt.Sprintf("execute store result score %s %s run data get storage %s lists.v%d", result.holder, result.objective, c.storageName(), listID)}, result, nil
+		if c.isEntitySet(collectionID) {
+			return []string{
+				fmt.Sprintf("scoreboard players set %s %s 0", result.holder, result.objective),
+				fmt.Sprintf("execute as @e[tag=%s] run scoreboard players add %s %s 1", c.entitySetTag(collectionID), result.holder, result.objective),
+			}, result, nil
+		}
+		if c.isPrimitiveSet(collectionID) {
+			return []string{fmt.Sprintf("execute store result score %s %s run data get storage %s sets.v%d.length 1", result.holder, result.objective, c.storageName(), collectionID)}, result, nil
+		}
+		if !c.isList(collectionID) {
+			return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not a collection", identifier.Name)}
+		}
+		return []string{fmt.Sprintf("execute store result score %s %s run data get storage %s lists.v%d", result.holder, result.objective, c.storageName(), collectionID)}, result, nil
 	}
-	index, ok := c.functionIndexes[callee.Name]
+	mapping, targetNamespace, targetObjective, ok := c.callTarget(callee.Name)
 	if !ok {
 		return nil, value{}, Error{Position: callee.Pos, Message: fmt.Sprintf("undefined function %q", callee.Name)}
 	}
-	mapping := c.output.FunctionMappings[index]
+	targetStorage := targetObjective + ":data"
 	if len(call.Arguments) != len(mapping.Parameters) {
 		return nil, value{}, Error{
 			Position: call.Pos,
@@ -1834,12 +2178,37 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 	var commands []string
 	arguments := make([]value, 0, len(call.Arguments))
 	for i, argument := range call.Arguments {
-		if mapping.Parameters[i].IsString {
-			compiled, err := c.compileStringExpressionToPath(argument, fmt.Sprintf("strings.v%d", mapping.Parameters[i].VariableID), id, function)
+		if mapping.Parameters[i].IsPrimitiveSet {
+			identifier, ok := argument.(*ast.Identifier)
+			if !ok {
+				return nil, value{}, Error{Position: argument.Position(), Message: "primitive set argument must be a set variable"}
+			}
+			sourceID, found := c.resolve(identifier.Name, id, function)
+			if !found || !c.isPrimitiveSet(sourceID) {
+				return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not a primitive set", identifier.Name)}
+			}
+			commands = append(commands, fmt.Sprintf("data modify storage %s sets.v%d set from storage %s sets.v%d", targetStorage, mapping.Parameters[i].VariableID, c.storageName(), sourceID))
+			arguments = append(arguments, value{})
+			continue
+		}
+		if mapping.Parameters[i].IsEntitySet {
+			compiled, err := c.compileEntitySetExpression(argument, entitySetTagFor(targetObjective, mapping.Parameters[i].VariableID), id, function)
 			if err != nil {
 				return nil, value{}, err
 			}
 			commands = append(commands, compiled...)
+			arguments = append(arguments, value{})
+			continue
+		}
+		if mapping.Parameters[i].IsString {
+			argumentPath := fmt.Sprintf("scratch.import_string_%d", i)
+			compiled, err := c.compileStringExpressionToPath(argument, argumentPath, id, function)
+			if err != nil {
+				return nil, value{}, err
+			}
+			commands = append(commands, compiled...)
+			commands = append(commands, fmt.Sprintf("data modify storage %s strings.v%d set from storage %s %s", targetStorage, mapping.Parameters[i].VariableID, c.storageName(), argumentPath))
+			commands = append(commands, fmt.Sprintf("data remove storage %s %s", c.storageName(), argumentPath))
 			arguments = append(arguments, value{})
 			continue
 		}
@@ -1852,7 +2221,10 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 			if !found || !c.isList(variableID) {
 				return nil, value{}, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not a list", identifier.Name)}
 			}
-			commands = append(commands, fmt.Sprintf("data modify storage %s lists.v%d set from storage %s lists.v%d", c.storageName(), mapping.Parameters[i].VariableID, c.storageName(), variableID))
+			commands = append(commands,
+				fmt.Sprintf("data modify storage %s lists.v%d set from storage %s lists.v%d", targetStorage, mapping.Parameters[i].VariableID, c.storageName(), variableID),
+				fmt.Sprintf("data modify storage %s list_types.v%d set from storage %s list_types.v%d", targetStorage, mapping.Parameters[i].VariableID, c.storageName(), variableID),
+			)
 			arguments = append(arguments, value{})
 			continue
 		}
@@ -1866,17 +2238,29 @@ func (c *compiler) compileCall(call *ast.Call, id ast.ScopeID, function *ast.Fun
 		arguments = append(arguments, stable)
 	}
 	for i, argument := range arguments {
-		if mapping.Parameters[i].IsList || mapping.Parameters[i].IsString {
+		if mapping.Parameters[i].IsList || mapping.Parameters[i].IsString || mapping.Parameters[i].IsEntitySet || mapping.Parameters[i].IsPrimitiveSet {
 			continue
 		}
-		parameter := value{holder: mapping.Parameters[i].Holder, objective: c.objective}
+		parameter := value{holder: mapping.Parameters[i].Holder, objective: targetObjective}
 		commands = append(commands, scoreboardOperation(parameter, "=", argument))
 	}
-	commands = append(commands, "function "+c.functionNamespace+":"+mapping.GeneratedName)
-	returned := value{holder: mapping.ReturnHolder, objective: c.objective}
+	commands = append(commands, "function "+targetNamespace+":"+mapping.GeneratedName)
+	returned := value{holder: mapping.ReturnHolder, objective: targetObjective}
 	if mapping.ReturnsList {
 		if requireValue {
 			return nil, value{}, Error{Position: call.Pos, Message: fmt.Sprintf("list returned by %q must be assigned to a variable", callee.Name)}
+		}
+		return commands, value{}, nil
+	}
+	if mapping.ReturnsEntitySet {
+		if requireValue {
+			return nil, value{}, Error{Position: call.Pos, Message: fmt.Sprintf("entity set returned by %q must be assigned to a variable", callee.Name)}
+		}
+		return commands, value{}, nil
+	}
+	if mapping.ReturnsPrimitiveSet {
+		if requireValue {
+			return nil, value{}, Error{Position: call.Pos, Message: fmt.Sprintf("primitive set returned by %q must be assigned to a variable", callee.Name)}
 		}
 		return commands, value{}, nil
 	}
@@ -1929,6 +2313,100 @@ func (c *compiler) compileRemoveToVariant(call *ast.Call, attribute *ast.Attribu
 		commands = append(commands, operations...)
 	}
 	return commands, nil
+}
+
+func (c *compiler) compileEntitySetMethod(call *ast.Call, attribute *ast.Attribute, setID uint32, id ast.ScopeID, function *ast.Function, requireValue bool) ([]string, value, error) {
+	if requireValue {
+		return nil, value{}, Error{Position: call.Pos, Message: attribute.Name + " does not return a value"}
+	}
+	tag := c.entitySetTag(setID)
+	if attribute.Name == "clear" {
+		if len(call.Arguments) != 0 {
+			return nil, value{}, Error{Position: call.Pos, Message: "clear expects no arguments"}
+		}
+		return []string{fmt.Sprintf("tag @e[tag=%s] remove %s", tag, tag)}, value{}, nil
+	}
+	if attribute.Name != "add" && attribute.Name != "discard" && attribute.Name != "remove" {
+		return nil, value{}, Error{Position: attribute.Pos, Message: fmt.Sprintf("unknown entity-set method %q", attribute.Name)}
+	}
+	if len(call.Arguments) != 1 {
+		return nil, value{}, Error{Position: call.Pos, Message: attribute.Name + " expects one entity"}
+	}
+	operation := "add"
+	if attribute.Name == "discard" || attribute.Name == "remove" {
+		operation = "remove"
+	}
+	commands, selector, dynamic, err := c.compileEntitySelector(call.Arguments[0], id, function)
+	if err != nil {
+		return nil, value{}, err
+	}
+	operations := []string{}
+	if attribute.Name == "remove" {
+		operations = append(operations, "execute as "+selector+" unless entity @s[tag="+tag+"] run return fail")
+	}
+	operations = append(operations, fmt.Sprintf("tag %s %s %s", selector, operation, tag))
+	if dynamic {
+		helper := c.reserveInternalFunction()
+		for index := range operations {
+			operations[index] = "$" + operations[index]
+		}
+		c.output.Functions[helper] = operations
+		commands = append(commands, fmt.Sprintf("function %s:%s with storage %s scratch", c.functionNamespace, helper, c.storageName()))
+	} else {
+		commands = append(commands, operations...)
+	}
+	return commands, value{}, nil
+}
+
+func (c *compiler) compileEntitySetMembership(expression *ast.Binary, id ast.ScopeID, function *ast.Function) ([]string, value, error) {
+	set, ok := expression.Right.(*ast.Identifier)
+	if !ok {
+		return nil, value{}, Error{Position: expression.Right.Position(), Message: "membership requires an entity-set variable"}
+	}
+	setID, found := c.resolve(set.Name, id, function)
+	if found && c.isPrimitiveSet(setID) {
+		return c.compilePrimitiveSetMembership(expression.Left, setID, id, function)
+	}
+	if !found || !c.isEntitySet(setID) {
+		return nil, value{}, Error{Position: set.Pos, Message: fmt.Sprintf("%q is not an entity set", set.Name)}
+	}
+	commands, selector, dynamic, err := c.compileEntitySelector(expression.Left, id, function)
+	if err != nil {
+		return nil, value{}, err
+	}
+	result := c.newTemporary()
+	commands = append(commands, fmt.Sprintf("scoreboard players set %s %s 0", result.holder, result.objective))
+	check := fmt.Sprintf("execute as %s if entity @s[tag=%s] run scoreboard players set %s %s 1", selector, c.entitySetTag(setID), result.holder, result.objective)
+	if dynamic {
+		helper := c.reserveInternalFunction()
+		c.output.Functions[helper] = []string{"$" + check}
+		commands = append(commands, fmt.Sprintf("function %s:%s with storage %s scratch", c.functionNamespace, helper, c.storageName()))
+	} else {
+		commands = append(commands, check)
+	}
+	return commands, result, nil
+}
+
+func (c *compiler) compileEntitySelector(expression ast.Expression, id ast.ScopeID, function *ast.Function) ([]string, string, bool, error) {
+	if selector, ok := expression.(*ast.EntitySelector); ok {
+		return nil, selector.Value, false, nil
+	}
+	identifier, ok := expression.(*ast.Identifier)
+	if !ok {
+		return nil, "", false, Error{Position: expression.Position(), Message: "expected an entity selector or entity variable"}
+	}
+	variableID, found := c.resolve(identifier.Name, id, function)
+	if !found {
+		return nil, "", false, Error{Position: identifier.Pos, Message: fmt.Sprintf("undefined entity %q", identifier.Name)}
+	}
+	if _, entity := c.entityVariables[variableID]; !entity {
+		return nil, "", false, Error{Position: identifier.Pos, Message: fmt.Sprintf("%q is not an entity", identifier.Name)}
+	}
+	commands := []string{fmt.Sprintf("data modify storage %s scratch.entity_uuid set from storage %s entities.v%d.uuid", c.storageName(), c.storageName(), variableID)}
+	for part := 0; part < 4; part++ {
+		commands = append(commands, fmt.Sprintf("execute store result storage %s scratch.uuid%d int 1 run data get storage %s scratch.entity_uuid[%d]", c.storageName(), part, c.storageName(), part))
+	}
+	return commands, "@n[tag=" + c.entityUUIDTagMacro() + "]", true, nil
 }
 
 func (c *compiler) compileListMethod(call *ast.Call, attribute *ast.Attribute, id ast.ScopeID, function *ast.Function, requireValue bool) ([]string, value, error) {
@@ -2260,6 +2738,7 @@ func (c *compiler) buildLoad() {
 	for _, constant := range constants {
 		c.output.Load = append(c.output.Load, fmt.Sprintf("scoreboard players set %s %s %d", constantHolder(constant), c.objective, constant))
 	}
+	c.output.Load = append(c.output.Load, c.globalInitializers...)
 }
 
 func variableHolder(id uint32) string {

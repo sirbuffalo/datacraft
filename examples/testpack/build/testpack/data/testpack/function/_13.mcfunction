@@ -1,2 +1,2 @@
-tellraw @a [{"text":"--- mccomp test pack starting ---"}]
+tellraw @a [{"text":"--- DataCraft test pack starting ---"}]
 function testpack:_12

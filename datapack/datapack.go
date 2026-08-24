@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	"mccomp/compiler"
-	"mccomp/parser"
+	"github.com/sirbuffalo/datacraft/compiler"
+	"github.com/sirbuffalo/datacraft/parser"
 )
 
 type Config struct {
@@ -38,7 +38,7 @@ func Build(source string, config Config) (Pack, error) {
 		return Pack{}, fmt.Errorf("pack format must be positive")
 	}
 	if config.Description == "" {
-		config.Description = "Compiled with mccomp"
+		config.Description = "Compiled with DataCraft"
 	}
 
 	output, err := compiler.Compile(program, config.PackName)
@@ -72,11 +72,11 @@ func Build(source string, config Config) (Pack, error) {
 		files[path.Join("data", config.PackName, "function", name+".mcfunction")] = functionText(commands)
 	}
 	for _, function := range output.FunctionMappings {
-		if !function.Exported || function.Name == "load" {
+		if !function.Exposed || function.Name == "load" {
 			continue
 		}
 		if strings.HasPrefix(function.Name, "_") {
-			return Pack{}, fmt.Errorf("exported function %q uses the reserved internal prefix '_'", function.Name)
+			return Pack{}, fmt.Errorf("exposed function %q uses the reserved internal prefix '_'", function.Name)
 		}
 		wrapper := make([]string, 0, len(function.Parameters)+2)
 		for _, parameter := range function.Parameters {

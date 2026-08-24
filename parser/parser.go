@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"mccomp/ast"
-	"mccomp/lexer"
-	"mccomp/token"
+	"github.com/sirbuffalo/datacraft/ast"
+	"github.com/sirbuffalo/datacraft/lexer"
+	"github.com/sirbuffalo/datacraft/token"
 )
 
 type Error struct {
@@ -29,14 +29,38 @@ func Parse(source string) (*ast.Program, error) {
 	return p.parseProgram()
 }
 
+// ParseLegacy explicitly opts source into the version-1 grammar. It is kept
+// for compatibility tests and embedders migrating older source code; normal
+// Parse calls default to version 2 when no version header is present.
+func ParseLegacy(source string) (*ast.Program, error) {
+	return Parse("version 1\n" + source)
+}
+
 type parser struct {
-	tokens []token.Token
-	index  int
+	tokens  []token.Token
+	index   int
+	version int
 }
 
 func (p *parser) parseProgram() (*ast.Program, error) {
-	program := &ast.Program{}
+	program := &ast.Program{Version: 2}
+	p.version = 2
 	p.skipNewlines()
+	if p.match(token.Version) {
+		version, err := p.consume(token.Integer, "expected language version number")
+		if err != nil {
+			return nil, err
+		}
+		parsed, parseErr := strconv.Atoi(version.Lexeme)
+		if parseErr != nil || (parsed != 1 && parsed != 2) {
+			return nil, Error{version.Position, "language version must be 1 or 2"}
+		}
+		program.Version, p.version = parsed, parsed
+		if err = p.endStatement(); err != nil {
+			return nil, err
+		}
+		p.skipNewlines()
+	}
 	if p.match(token.Namespace) {
 		name, err := p.consume(token.Identifier, "expected namespace ID")
 		if err != nil {
@@ -48,7 +72,24 @@ func (p *parser) parseProgram() (*ast.Program, error) {
 		}
 		p.skipNewlines()
 	}
+	for p.check(token.From) {
+		declaration, err := p.parseImport()
+		if err != nil {
+			return nil, err
+		}
+		program.Imports = append(program.Imports, declaration)
+		p.skipNewlines()
+	}
 	for !p.check(token.EOF) {
+		if program.Version == 2 && (p.check(token.Const) || (p.check(token.Identifier) && p.checkNext(token.Colon))) {
+			declaration, err := p.parseDeclaration()
+			if err != nil {
+				return nil, err
+			}
+			program.Globals = append(program.Globals, declaration)
+			p.skipNewlines()
+			continue
+		}
 		function, err := p.parseFunction()
 		if err != nil {
 			return nil, err
@@ -59,8 +100,40 @@ func (p *parser) parseProgram() (*ast.Program, error) {
 	return program, nil
 }
 
+func (p *parser) parseImport() (*ast.Import, error) {
+	start, err := p.consume(token.From, "expected 'from'")
+	if err != nil {
+		return nil, err
+	}
+	namespace, err := p.consume(token.Identifier, "expected namespace after 'from'")
+	if err != nil {
+		return nil, err
+	}
+	if _, err = p.consume(token.Import, "expected 'import' after namespace"); err != nil {
+		return nil, err
+	}
+	var names []string
+	for {
+		name, nameErr := p.consume(token.Identifier, "expected function name after 'import'")
+		if nameErr != nil {
+			return nil, nameErr
+		}
+		names = append(names, name.Lexeme)
+		if !p.match(token.Comma) {
+			break
+		}
+	}
+	if err = p.endStatement(); err != nil {
+		return nil, err
+	}
+	return &ast.Import{Pos: start.Position, Namespace: namespace.Lexeme, Names: names}, nil
+}
+
 func (p *parser) parseFunction() (*ast.Function, error) {
-	exported := p.match(token.Export)
+	if p.match(token.Export) {
+		return nil, Error{p.previous().Position, "'export' was renamed to 'expose'"}
+	}
+	exposed := p.match(token.Expose)
 	start, err := p.consume(token.Def, "expected 'def' at the top level")
 	if err != nil {
 		return nil, err
@@ -74,6 +147,7 @@ func (p *parser) parseFunction() (*ast.Function, error) {
 	}
 	parameters := []string{}
 	parameterTypes := map[string]string{}
+	types := map[string]*ast.TypeRef{}
 	if !p.check(token.RightParen) {
 		for {
 			parameter, consumeErr := p.consume(token.Identifier, "expected parameter name")
@@ -82,11 +156,14 @@ func (p *parser) parseFunction() (*ast.Function, error) {
 			}
 			parameters = append(parameters, parameter.Lexeme)
 			if p.match(token.Colon) {
-				typeName, typeErr := p.consume(token.Identifier, "expected parameter type after ':'")
+				typeRef, typeErr := p.parseTypeRef()
 				if typeErr != nil {
 					return nil, typeErr
 				}
-				parameterTypes[parameter.Lexeme] = typeName.Lexeme
+				types[parameter.Lexeme] = typeRef
+				parameterTypes[parameter.Lexeme] = typeRef.Name
+			} else if p.version == 2 {
+				return nil, Error{parameter.Position, "version 2 parameters require a type"}
 			}
 			if !p.match(token.Comma) {
 				break
@@ -96,6 +173,15 @@ func (p *parser) parseFunction() (*ast.Function, error) {
 	if _, err = p.consume(token.RightParen, "expected ')' after parameters"); err != nil {
 		return nil, err
 	}
+	var returnType *ast.TypeRef
+	if p.match(token.Arrow) {
+		returnType, err = p.parseTypeRef()
+		if err != nil {
+			return nil, err
+		}
+	} else if p.version == 2 {
+		return nil, Error{p.current().Position, "version 2 functions require a return type"}
+	}
 	if _, err = p.consume(token.Colon, "expected ':' after function signature"); err != nil {
 		return nil, err
 	}
@@ -103,7 +189,58 @@ func (p *parser) parseFunction() (*ast.Function, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.Function{Pos: start.Position, Exported: exported, Name: name.Lexeme, Parameters: parameters, ParameterTypes: parameterTypes, Body: body}, nil
+	return &ast.Function{Pos: start.Position, Exposed: exposed, Name: name.Lexeme, Parameters: parameters, ParameterTypes: parameterTypes, Types: types, ReturnType: returnType, Body: body}, nil
+}
+
+func (p *parser) parseTypeRef() (*ast.TypeRef, error) {
+	readonly := p.match(token.Readonly)
+	start := p.current()
+	if !p.match(token.Identifier, token.None) {
+		return nil, Error{start.Position, "expected type name"}
+	}
+	name := p.previous().Lexeme
+	if p.previous().Kind == token.None {
+		name = "None"
+	}
+	typeRef := &ast.TypeRef{Pos: start.Position, Name: name, Readonly: readonly}
+	if p.match(token.LeftBracket) {
+		element, err := p.parseTypeRef()
+		if err != nil {
+			return nil, err
+		}
+		if _, err = p.consume(token.RightBracket, "expected ']' after collection element type"); err != nil {
+			return nil, err
+		}
+		typeRef.Element = element
+	}
+	typeRef.Nullable = p.match(token.Question)
+	return typeRef, nil
+}
+
+func (p *parser) parseDeclaration() (*ast.Assignment, error) {
+	constant := p.match(token.Const)
+	name, err := p.consume(token.Identifier, "expected variable name")
+	if err != nil {
+		return nil, err
+	}
+	if _, err = p.consume(token.Colon, "expected ':' after variable name"); err != nil {
+		return nil, err
+	}
+	typeRef, err := p.parseTypeRef()
+	if err != nil {
+		return nil, err
+	}
+	if _, err = p.consume(token.Assign, "typed variables must be initialized with '='"); err != nil {
+		return nil, err
+	}
+	value, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	if err = p.endStatement(); err != nil {
+		return nil, err
+	}
+	return &ast.Assignment{Pos: name.Position, Name: name.Lexeme, Operator: token.Assign, Value: value, DeclaredType: typeRef, Constant: constant}, nil
 }
 
 func (p *parser) parseBlock() ([]ast.Statement, error) {
@@ -137,6 +274,8 @@ func (p *parser) parseBlock() ([]ast.Statement, error) {
 
 func (p *parser) parseStatement() (ast.Statement, error) {
 	switch {
+	case p.version == 2 && (p.check(token.Const) || (p.check(token.Identifier) && p.checkNext(token.Colon))):
+		return p.parseDeclaration()
 	case p.match(token.Return):
 		return p.parseReturn(p.previous())
 	case p.match(token.Global):
@@ -213,6 +352,15 @@ func (p *parser) parseFor(start token.Token) (ast.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
+	var variableType *ast.TypeRef
+	if p.match(token.Colon) {
+		variableType, err = p.parseTypeRef()
+		if err != nil {
+			return nil, err
+		}
+	} else if p.version == 2 {
+		return nil, Error{variable.Position, "version 2 loop variables require a type"}
+	}
 	if _, err = p.consume(token.In, "expected 'in' after loop variable"); err != nil {
 		return nil, err
 	}
@@ -227,7 +375,7 @@ func (p *parser) parseFor(start token.Token) (ast.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.For{Pos: start.Position, Variable: variable.Lexeme, Iterable: iterable, Body: body}, nil
+	return &ast.For{Pos: start.Position, Variable: variable.Lexeme, VariableType: variableType, Iterable: iterable, Body: body}, nil
 }
 
 func (p *parser) parseWhile(start token.Token) (ast.Statement, error) {
@@ -370,11 +518,11 @@ func (p *parser) parseEquality() (ast.Expression, error) {
 }
 
 func (p *parser) parseComparison() (ast.Expression, error) {
-	return p.parseBinary(p.parseConcat, token.Less, token.LessEqual, token.Greater, token.GreaterEqual)
+	return p.parseBinary(p.parseSetOperation, token.Less, token.LessEqual, token.Greater, token.GreaterEqual, token.In)
 }
 
-func (p *parser) parseConcat() (ast.Expression, error) {
-	return p.parseBinary(p.parseTerm, token.Ampersand)
+func (p *parser) parseSetOperation() (ast.Expression, error) {
+	return p.parseBinary(p.parseTerm, token.Pipe, token.Ampersand)
 }
 
 func (p *parser) parseTerm() (ast.Expression, error) {
@@ -484,6 +632,9 @@ func (p *parser) parsePrimary() (ast.Expression, error) {
 	if p.match(token.True, token.False) {
 		return &ast.Boolean{Pos: p.previous().Position, Value: p.previous().Kind == token.True}, nil
 	}
+	if p.match(token.None) {
+		return &ast.NoneLiteral{Pos: p.previous().Position}, nil
+	}
 	if p.match(token.Identifier) {
 		return &ast.Identifier{Pos: p.previous().Position, Name: p.previous().Lexeme}, nil
 	}
@@ -516,6 +667,26 @@ func (p *parser) parsePrimary() (ast.Expression, error) {
 			return nil, err
 		}
 		return &ast.List{Pos: open.Position, Elements: elements}, nil
+	}
+	if p.match(token.LeftBrace) {
+		open := p.previous()
+		elements := []ast.Expression{}
+		if !p.check(token.RightBrace) {
+			for {
+				element, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				elements = append(elements, element)
+				if !p.match(token.Comma) {
+					break
+				}
+			}
+		}
+		if _, err := p.consume(token.RightBrace, "expected '}' after set elements"); err != nil {
+			return nil, err
+		}
+		return &ast.Set{Pos: open.Position, Elements: elements}, nil
 	}
 	return nil, Error{p.current().Position, fmt.Sprintf("expected expression, found %s", p.current().Kind)}
 }

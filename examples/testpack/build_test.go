@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mccomp/datapack"
+	"github.com/sirbuffalo/datacraft/datapack"
 )
 
 func TestSourceBuilds(t *testing.T) {
-	source, err := os.ReadFile("testpack.mccomp")
+	source, err := os.ReadFile("testpack.dcraft")
 	if err != nil {
 		t.Fatal(err)
 	}

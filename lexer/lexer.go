@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"mccomp/token"
+	"github.com/sirbuffalo/datacraft/token"
 )
 
 type Error struct {
@@ -124,7 +124,7 @@ func (l *lexer) lexSelector() {
 			l.advance()
 			continue
 		}
-		if depth == 0 && (unicode.IsSpace(r) || strings.ContainsRune(",):", r)) {
+		if depth == 0 && (unicode.IsSpace(r) || strings.ContainsRune(",):}", r)) {
 			break
 		}
 		l.advance()
@@ -267,6 +267,7 @@ func (l *lexer) lexOperator() error {
 		"=": token.Assign, "+=": token.PlusAssign, "-=": token.MinusAssign,
 		"*=": token.StarAssign, "/=": token.SlashAssign, "==": token.Equal,
 		"!=": token.NotEqual, "<=": token.LessEqual, ">=": token.GreaterEqual,
+		"->": token.Arrow,
 	}
 	if kind, ok := twoKinds[two]; ok && len(two) == 2 {
 		l.advance()
@@ -279,6 +280,7 @@ func (l *lexer) lexOperator() error {
 		"(": token.LeftParen, ")": token.RightParen, ",": token.Comma, ":": token.Colon, ".": token.Dot,
 		"[": token.LeftBracket, "]": token.RightBracket,
 		"&": token.Ampersand,
+		"?": token.Question, "{": token.LeftBrace, "}": token.RightBrace, "|": token.Pipe,
 	}
 	if kind, ok := oneKinds[one]; ok {
 		l.emit(kind, one, pos)

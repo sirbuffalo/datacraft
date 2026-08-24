@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Overview — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>Overview</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a aria-current="page" href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>A typed language for Minecraft data packs</h2></div>
+<p>DataCraft compiles Python-like, indentation-based source into Minecraft Java Edition data-pack functions. Version 2 is the default when a source file has no version header.</p>
+<div class="docs-grid">
+<article><h3>First program</h3>
+<pre><code>namespace demo
+
+expose def add(a: int, b: int) -&gt; int:
+    return a + b
+</code></pre>
+<p>Functions compile to internal ID-based functions. <code>expose</code> also creates a stable, named wrapper that other packs can call.</p>
+</article>
+<article><h3>Runtime model</h3>
+<ul>
+<li>Each namespace has its own scoreboard.</li>
+<li>Integer and boolean values use scoreboard players.</li>
+<li>Strings, lists, and structured values use command storage.</li>
+<li>Entity values use tags and UUID-backed objects.</li>
+<li>Functions exchange values through reserved runtime locations.</li>
+</ul>
+</article>
+<article><h3>Source files</h3>
+<p>DataCraft source files use the <code>.dcraft</code> extension. A project may contain several source files under its configured source directory; imports resolve across those files.</p>
+</article>
+<article><h3>Core rules</h3>
+<ul>
+<li>Function parameters and return values are typed.</li>
+<li><code>None</code> is capitalized and only allowed by nullable types.</li>
+<li>A <code>bool</code> is a restricted integer whose value is <code>0</code> or <code>1</code>.</li>
+<li>Collections are homogeneous unless their declared element type permits otherwise.</li>
+</ul>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

@@ -3,14 +3,14 @@ package scope_test
 import (
 	"testing"
 
-	"mccomp/ast"
-	"mccomp/compiler/scope"
-	"mccomp/parser"
+	"github.com/sirbuffalo/datacraft/ast"
+	"github.com/sirbuffalo/datacraft/compiler/scope"
+	"github.com/sirbuffalo/datacraft/parser"
 )
 
 func TestAssignEveryScopeInSourceOrder(t *testing.T) {
 	source := "namespace demo\n\ndef run(items):\n    if ready():\n        for item in items:\n            use(item)\n    elif waiting():\n        wait()\n    else:\n        stop()\n\ndef other():\n    return 1\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -48,7 +48,7 @@ func TestAssignEveryScopeInSourceOrder(t *testing.T) {
 }
 
 func TestAssignIsDeterministic(t *testing.T) {
-	program, err := parser.Parse("def run(items):\n    for item in items:\n        use(item)\n")
+	program, err := parser.ParseLegacy("def run(items):\n    for item in items:\n        use(item)\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}

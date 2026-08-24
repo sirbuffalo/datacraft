@@ -4,23 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b0d0c">
-  <title>mccomp — Minecraft data-pack compiler</title>
+  <title>DataCraft — Minecraft data-pack compiler</title>
   <link rel="stylesheet" href="vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=7">
   <script src="wasm_exec.js"></script>
   <script src="vendor/codemirror/codemirror.min.js"></script>
-  <script src="app.js" defer></script>
+  <script src="zip.js?v=1" defer></script>
+  <script src="app.js?v=8" defer></script>
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
         <p class="eyebrow">MINECRAFT DATA-PACK TOOLCHAIN</p>
-        <h1>mccomp</h1>
+        <h1>DataCraft</h1>
       </div>
-      <div class="runtime-status" id="runtimeStatus" data-state="loading">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span>Loading compiler…</span>
+      <div class="topbar-actions">
+        <button class="page-link project-button" id="loadExampleButton" type="button">Load example</button>
+        <button class="page-link project-button" id="openProjectButton" type="button">Open project</button>
+        <button class="page-link project-button" id="saveProjectButton" type="button">Save project</button>
+        <input class="sr-only" id="projectFileInput" type="file" accept=".zip,application/zip">
+        <a class="page-link" href="docs/index.html">Documentation</a>
+        <div class="runtime-status" id="runtimeStatus" data-state="loading">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>Loading compiler…</span>
+        </div>
       </div>
     </header>
 
@@ -41,7 +49,7 @@
 
         <label>
           Description
-          <input id="description" value="Built with mccomp" autocomplete="off">
+          <input id="description" value="Built with DataCraft" autocomplete="off">
         </label>
 
         <label>
@@ -63,22 +71,20 @@
 
       <section class="editor-panel">
         <div class="editor-toolbar">
-          <div class="file-tab"><span class="file-dot"></span>main.mc</div>
+          <div class="file-tabs" id="fileTabs" aria-label="Source files"></div>
+          <button class="add-file" id="addFileButton" type="button" title="Add source file">+</button>
+          <button class="file-action" id="renameFileButton" type="button" title="Rename active file">Rename</button>
+          <button class="file-action file-action-danger" id="deleteFileButton" type="button" title="Delete active file">Delete</button>
+          <span class="save-status" id="saveStatus">Saved locally</span>
           <span id="lineCount">0 lines</span>
         </div>
-        <label class="sr-only" for="sourceEditor">mccomp source</label>
-        <textarea id="sourceEditor" spellcheck="false" aria-label="mccomp source code">namespace example
+        <label class="sr-only" for="sourceEditor">DataCraft source</label>
+        <textarea id="sourceEditor" spellcheck="false" aria-label="DataCraft source code">version 2
+namespace example
 
-def load():
-    global counter
-    counter = 0
-
-def tick():
-    global counter
-    counter += 1
-
-export def add(a, b):
-    return a + b</textarea>
+expose def add(a: int, b: int) -> int:
+    total: int = a + b
+    return total</textarea>
       </section>
 
       <aside class="output-panel">

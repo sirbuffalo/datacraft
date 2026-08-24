@@ -1,4 +1,4 @@
-# Basic mccomp example
+# Basic DataCraft example
 
 This example demonstrates:
 
@@ -9,7 +9,7 @@ This example demonstrates:
 - compound assignment;
 - generated `load` and `tick` entry points;
 - deterministic function mappings such as `load -> _0` and `tick -> _1`;
-- exported wrapper functions such as `reset.mcfunction -> _2`;
+- exposed wrapper functions such as `reset.mcfunction -> _2`;
 - a raw Minecraft command;
 - returning a scoreboard value.
 
@@ -32,6 +32,6 @@ scoreboard players set #c5 example 5
 ```
 
 Internal functions read parameters from their assigned `#v<ID>` holders and
-write return values to `#r<FUNCTION_ID>`. Exported wrappers accept parameters as
+write return values to `#r<FUNCTION_ID>`. Exposed wrappers accept parameters as
 Minecraft function macros. Returning wrappers use `return run function` so the
 exact integer returned by the internal function is returned directly.

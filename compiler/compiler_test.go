@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"mccomp/compiler"
-	"mccomp/parser"
+	"github.com/sirbuffalo/datacraft/compiler"
+	"github.com/sirbuffalo/datacraft/parser"
 )
 
 func TestCompileConstantsAssignmentsAndExpressions(t *testing.T) {
 	source := "namespace demo\n\ndef calculate(a, b):\n    total = a + b * 5\n    total -= 2\n    return total\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -51,7 +51,7 @@ func TestCompileConstantsAssignmentsAndExpressions(t *testing.T) {
 }
 
 func TestCompileGlobalAssignment(t *testing.T) {
-	program, err := parser.Parse("def update():\n    global counter\n    counter = 5\n    counter += 1\n")
+	program, err := parser.ParseLegacy("def update():\n    global counter\n    counter = 5\n    counter += 1\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -68,8 +68,59 @@ func TestCompileGlobalAssignment(t *testing.T) {
 	}
 }
 
+func TestCompileVersion2TypedNamespaceGlobals(t *testing.T) {
+	source := `namespace globals
+
+const LIMIT: int = 5
+message: str = "ready"
+values: list[int] = [1, 2]
+unique: set[int] = {2, 3}
+target: entity? = None
+
+def update() -> int:
+    global message, values, unique, target
+    message = "running"
+    values.append(LIMIT)
+    unique.add(LIMIT)
+    target = @n[type=minecraft:pig]
+    return LIMIT
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "globals")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	load := strings.Join(output.Load, "\n")
+	for _, wanted := range []string{
+		"scoreboard objectives add globals dummy",
+		"scoreboard players set #c5 globals 5",
+		"scoreboard players operation #v0 globals = #c5 globals",
+		`data modify storage globals:data strings.v1 set value "ready"`,
+		"data modify storage globals:data lists.v2 set value []",
+		"data remove storage globals:data entities.v4",
+	} {
+		if !strings.Contains(load, wanted) {
+			t.Fatalf("load is missing %q:\n%s", wanted, load)
+		}
+	}
+	update := strings.Join(output.Functions["_0"], "\n")
+	for _, wanted := range []string{
+		`data modify storage globals:data strings.v1 set value "running"`,
+		"data modify storage globals:data lists.v2 append value 0",
+		"execute as @n[type=minecraft:pig] run function globals:",
+		"return run scoreboard players get #r0 globals",
+	} {
+		if !strings.Contains(update, wanted) {
+			t.Fatalf("update is missing %q:\n%s", wanted, update)
+		}
+	}
+}
+
 func TestCompileComparisonAndBooleanExpression(t *testing.T) {
-	program, err := parser.Parse("def test(a, b):\n    result = a < b and not False\n")
+	program, err := parser.ParseLegacy("def test(a, b):\n    result = a < b and not False\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -82,8 +133,8 @@ func TestCompileComparisonAndBooleanExpression(t *testing.T) {
 	}
 }
 
-func TestCompileFunctionMappingsPreserveExport(t *testing.T) {
-	program, err := parser.Parse("export def public():\n    return 1\n\ndef private():\n    return 2\n")
+func TestCompileFunctionMappingsPreserveExpose(t *testing.T) {
+	program, err := parser.ParseLegacy("expose def public():\n    return 1\n\ndef private():\n    return 2\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -91,7 +142,7 @@ func TestCompileFunctionMappingsPreserveExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
-	if !output.FunctionMappings[0].Exported || output.FunctionMappings[1].Exported {
+	if !output.FunctionMappings[0].Exposed || output.FunctionMappings[1].Exposed {
 		t.Fatalf("function mappings = %#v", output.FunctionMappings)
 	}
 	if output.FunctionMappings[0].GeneratedName != "_0" || output.FunctionMappings[1].GeneratedName != "_1" {
@@ -101,7 +152,7 @@ func TestCompileFunctionMappingsPreserveExport(t *testing.T) {
 
 func TestCompileInternalFunctionCall(t *testing.T) {
 	source := "def add(a, b):\n    return a + b\n\ndef main():\n    result = add(2, 3)\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -123,7 +174,7 @@ func TestCompileInternalFunctionCall(t *testing.T) {
 }
 
 func TestNamespaceOwnsScoreboard(t *testing.T) {
-	program, err := parser.Parse("namespace combat\n\ndef load():\n    damage = 5\n")
+	program, err := parser.ParseLegacy("namespace combat\n\ndef load():\n    damage = 5\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -144,7 +195,7 @@ func TestNamespaceOwnsScoreboard(t *testing.T) {
 
 func TestCompileIfElifElseAndBooleans(t *testing.T) {
 	source := "namespace demo\n\ndef test(value):\n    enabled = True\n    disabled = False\n    if value:\n        result = 1\n    elif enabled:\n        result = 2\n    else:\n        result = 3\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -182,7 +233,7 @@ func TestCompileIfElifElseAndBooleans(t *testing.T) {
 }
 
 func TestInternalFunctionsReturnExactNumbers(t *testing.T) {
-	program, err := parser.Parse("namespace logic\n\ndef one():\n    return True\n\ndef two():\n    return 2\n\ndef three():\n    return 3\n")
+	program, err := parser.ParseLegacy("namespace logic\n\ndef one():\n    return True\n\ndef two():\n    return 2\n\ndef three():\n    return 3\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -203,7 +254,7 @@ func TestInternalFunctionsReturnExactNumbers(t *testing.T) {
 }
 
 func TestReturnInsideIfElifElsePropagates(t *testing.T) {
-	program, err := parser.Parse("namespace logic\n\ndef choose(value):\n    if value == 1:\n        return 1\n    elif value == 2:\n        return 2\n    else:\n        return 3\n    return 0\n")
+	program, err := parser.ParseLegacy("namespace logic\n\ndef choose(value):\n    if value == 1:\n        return 1\n    elif value == 2:\n        return 2\n    else:\n        return 3\n    return 0\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -234,7 +285,7 @@ func TestReturnInsideIfElifElsePropagates(t *testing.T) {
 }
 
 func TestNestedConditionalReturnPropagatesThroughEveryHelper(t *testing.T) {
-	program, err := parser.Parse("namespace logic\n\ndef nested(a, b):\n    if a:\n        if b:\n            return 3\n    return 0\n")
+	program, err := parser.ParseLegacy("namespace logic\n\ndef nested(a, b):\n    if a:\n        if b:\n            return 3\n    return 0\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -252,7 +303,7 @@ func TestNestedConditionalReturnPropagatesThroughEveryHelper(t *testing.T) {
 }
 
 func TestListsUseDataStorageAndItemsCanBeLoadedIntoScores(t *testing.T) {
-	program, err := parser.Parse("namespace inventory\n\ndef read(index):\n    items = [1, index + 2, 3]\n    first = items[0]\n    selected = items[index]\n    return selected\n")
+	program, err := parser.ParseLegacy("namespace inventory\n\ndef read(index):\n    items = [1, index + 2, 3]\n    first = items[0]\n    selected = items[index]\n    return selected\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -286,7 +337,7 @@ func TestListsUseDataStorageAndItemsCanBeLoadedIntoScores(t *testing.T) {
 }
 
 func TestListItemsCanBeAssigned(t *testing.T) {
-	program, err := parser.Parse("namespace inventory\n\ndef update(index, amount):\n    items = [1, 2, 3]\n    items[0] = 5\n    items[index] = amount + 1\n    return items[0]\n")
+	program, err := parser.ParseLegacy("namespace inventory\n\ndef update(index, amount):\n    items = [1, 2, 3]\n    items[0] = 5\n    items[index] = amount + 1\n    return items[0]\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -313,7 +364,7 @@ func TestListItemsCanBeAssigned(t *testing.T) {
 
 func TestListsCanBeFunctionInputsAndOutputs(t *testing.T) {
 	source := "namespace inventory\n\ndef first(items):\n    return items[0]\n\ndef passthrough(items):\n    return items\n\ndef main():\n    source = [4, 5]\n    result = passthrough(source)\n    return first(result)\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -345,7 +396,7 @@ func TestListsCanBeFunctionInputsAndOutputs(t *testing.T) {
 
 func TestSayNumbersBooleansExpressionsAndLists(t *testing.T) {
 	source := "namespace demo\n\ndef show(value):\n    items = [1, value]\n    say(value + 2)\n    say(False)\n    say(items)\n    say([True, 3])\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -369,7 +420,7 @@ func TestSayNumbersBooleansExpressionsAndLists(t *testing.T) {
 }
 
 func TestSayJoinsStringsAndDynamicValues(t *testing.T) {
-	program, err := parser.Parse("namespace demo\n\ndef show(value):\n    items = [1, 2]\n    say(\"test: \", value + 5, \" items: \", items)\n")
+	program, err := parser.ParseLegacy("namespace demo\n\ndef show(value):\n    items = [1, 2]\n    say(\"test: \", value + 5, \" items: \", items)\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -384,7 +435,7 @@ func TestSayJoinsStringsAndDynamicValues(t *testing.T) {
 }
 
 func TestSayRequiresOneArgumentAndHasNoValue(t *testing.T) {
-	program, err := parser.Parse("def bad():\n    result = say(1)\n")
+	program, err := parser.ParseLegacy("def bad():\n    result = say(1)\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -396,7 +447,7 @@ func TestSayRequiresOneArgumentAndHasNoValue(t *testing.T) {
 
 func TestForListRangeAndWhileCompileRecursively(t *testing.T) {
 	source := "namespace loops\n\ndef test():\n    total = 0\n    items = [1, 2, 3]\n    for item in items:\n        total += item\n    for number in range(1, 4):\n        total += number\n    counter = 0\n    while counter < 3:\n        counter += 1\n    return total + counter\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -422,7 +473,7 @@ func TestForListRangeAndWhileCompileRecursively(t *testing.T) {
 }
 
 func TestReturnInsideWhilePropagates(t *testing.T) {
-	program, err := parser.Parse("namespace loops\n\ndef find():\n    value = 0\n    while value < 3:\n        value += 1\n        if value == 2:\n            return value\n    return 0\n")
+	program, err := parser.ParseLegacy("namespace loops\n\ndef find():\n    value = 0\n    while value < 3:\n        value += 1\n        if value == 2:\n            return value\n    return 0\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -444,7 +495,7 @@ func TestReturnInsideWhilePropagates(t *testing.T) {
 
 func TestBreakContinueLenAppendInsertAndRemove(t *testing.T) {
 	source := "namespace lists\n\ndef test():\n    items = [1, 2]\n    items.append(3)\n    items.insert(1, 8)\n    index = 2\n    items.insert(index, 9)\n    length = len(items)\n    removed = items.remove(1)\n    last = items.remove()\n    total = 0\n    for item in items:\n        if item == 9:\n            continue\n        if item == 3:\n            break\n        total += item\n    while True:\n        break\n    return length + removed + last + total\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -484,7 +535,7 @@ func TestBreakContinueLenAppendInsertAndRemove(t *testing.T) {
 
 func TestNestedListsCanBeReadWrittenAndDisplayed(t *testing.T) {
 	source := "namespace nested\n\ndef test():\n    matrix = [[1, 2], [3, 4]]\n    value = matrix[1][0]\n    say(matrix[0])\n    matrix[0][1] = 8\n    matrix[1] = [9, 10]\n    return matrix[1][0] + value\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -511,7 +562,7 @@ func TestNestedListsCanBeReadWrittenAndDisplayed(t *testing.T) {
 
 func TestStringStorageDisplayAndComparisonUsesTemporaryObjectives(t *testing.T) {
 	source := "namespace words\n\ndef test():\n    left = \"hello\"\n    right = \"hello\"\n    equal = left == right\n    right = \"world\"\n    different = left != right\n    copied = left\n    say(\"value: \", copied, \" equal: \", equal, \" different: \", different)\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -542,8 +593,8 @@ func TestStringStorageDisplayAndComparisonUsesTemporaryObjectives(t *testing.T) 
 }
 
 func TestStringJoinStrAndTypedInputsAndGlobals(t *testing.T) {
-	source := "namespace typed\n\ndef format(value: int, label: str, items: list):\n    global prefix: str\n    prefix = \"P\"\n    combined = prefix & label & str(value)\n    same = combined == \"Px5\"\n    say(combined)\n    return same + len(items)\n\ndef main():\n    values = [1, 2]\n    return format(5, \"x\", values)\n"
-	program, err := parser.Parse(source)
+	source := "namespace typed\n\ndef format(value: int, label: str, items: list):\n    global prefix: str\n    prefix = \"P\"\n    combined = prefix + label + str(value)\n    same = combined == \"Px5\"\n    say(combined)\n    return same + len(items)\n\ndef main():\n    values = [1, 2]\n    return format(5, \"x\", values)\n"
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -572,7 +623,7 @@ func TestStringJoinStrAndTypedInputsAndGlobals(t *testing.T) {
 
 func TestTypeTestsBoolConversionAndMixedLists(t *testing.T) {
 	source := "namespace types\n\ndef main():\n    number = 2\n    zero = 0\n    text = \"hello\"\n    empty = \"\"\n    items = [1, \"two\", [3]]\n    numeric = number is int\n    not_bool = number is bool\n    bool_value = zero is bool\n    string_value = text is str\n    list_value = items is list\n    first_type = items[0] is int\n    second_type = items[1] is str\n    items.append(\"four\")\n    items.insert(1, \"inserted\")\n    say(items[1], items)\n    return numeric + not_bool + bool_value + string_value + list_value + first_type + second_type + bool(number) + bool(zero) + bool(text) + bool(empty)\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -593,7 +644,7 @@ func TestTypeTestsBoolConversionAndMixedLists(t *testing.T) {
 
 func TestDynamicMixedListRuntime(t *testing.T) {
 	source := "namespace mixed\n\ndef main():\n    items = [1, \"two\", [3]]\n    index = 1\n    picked = items[index]\n    say(items[index], picked)\n    string_type = items[index] is str\n    for item in items:\n        say(item, item is int, item is str, item is list)\n    removed = items.remove(index)\n    say(removed)\n    return string_type + bool([]) + bool([1])\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -614,7 +665,7 @@ func TestDynamicMixedListRuntime(t *testing.T) {
 
 func TestEntityVariablesAndListsUseUUIDObjects(t *testing.T) {
 	source := "namespace entities\n\ndef main():\n    target = @s\n    copy = target\n    values = [@s]\n    values.append(@s)\n    values.insert(1, @s)\n    selected = values[0]\n    valid = selected is entity\n    for current in values:\n        say(current)\n    return valid\n"
-	program, err := parser.Parse(source)
+	program, err := parser.ParseLegacy(source)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -633,6 +684,218 @@ func TestEntityVariablesAndListsUseUUIDObjects(t *testing.T) {
 	}
 	if !containsSubstring(output.Tick, "_special/entity_list_") {
 		t.Fatalf("entity-list tick synchronization missing: %#v", output.Tick)
+	}
+}
+
+func TestCompileVersion2TypedNumericSubset(t *testing.T) {
+	source := "version 2\nnamespace strict\n\ndef add(a: int, b: int) -> int:\n    total: int = a + b\n    return total\n"
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "strict")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	if !containsSubstring(output.Functions["_0"], "scoreboard players operation") {
+		t.Fatalf("typed function commands = %#v", output.Functions["_0"])
+	}
+}
+
+func TestCompileVersion2RunsSemanticChecks(t *testing.T) {
+	source := "version 2\nnamespace strict\n\ndef main() -> None:\n    value = 5\n"
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	_, err = compiler.Compile(program, "strict")
+	if err == nil || !strings.Contains(err.Error(), "must be declared with a type") {
+		t.Fatalf("Compile() error = %v", err)
+	}
+}
+
+func TestCompileVersion2EntitySetUnionIntersectionParametersAndReturn(t *testing.T) {
+	source := `namespace strict
+
+def combine(left: set[entity], right: set[entity]) -> set[entity]:
+    union: set[entity] = left | right
+    shared: set[entity] = left & right
+    return union
+
+def use(first: set[entity], second: set[entity]) -> None:
+    result: set[entity] = combine(first, second)
+
+def nearby() -> set[entity]:
+    entities: set[entity] = @e[type=minecraft:pig]
+    return entities
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "strict")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := append([]string{}, output.Functions["_0"]...)
+	all = append(all, output.Functions["_1"]...)
+	all = append(all, output.Functions["_2"]...)
+	for _, wanted := range []string{
+		"tag @e[tag=_strict_set_0] add _strict_set_tmp_0",
+		"tag @e[tag=_strict_set_tmp_0] add _strict_set_2",
+		"tag @e[tag=_strict_set_tmp_2,tag=_strict_set_tmp_3] add _strict_set_3",
+		"tag @e[tag=_strict_set_2] add _strict_return_set_0",
+		"tag @e[tag=_strict_return_set_0] add _strict_set_6",
+		"tag @e[type=minecraft:pig] add _strict_set_7",
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing entity-set command %q in %#v", wanted, all)
+		}
+	}
+	if !output.FunctionMappings[0].ReturnsEntitySet || !output.FunctionMappings[0].Parameters[0].IsEntitySet {
+		t.Fatalf("entity-set mapping = %#v", output.FunctionMappings[0])
+	}
+}
+
+func TestCompileVersion2EntitySetOperations(t *testing.T) {
+	source := `namespace strict
+
+def operate(group: set[entity], item: entity) -> int:
+    group.add(item)
+    present: bool = item in group
+    group.discard(item)
+    group.add(@s)
+    group.remove(@s)
+    count: int = len(group)
+    for found: entity in group:
+        say(found)
+    group.clear()
+    return count + present
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "strict")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		"tag @n[tag=_strict_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)] add _strict_set_0",
+		"if entity @s[tag=_strict_set_0] run scoreboard players set",
+		"tag @s add _strict_set_0",
+		"tag @s remove _strict_set_0",
+		"execute as @e[tag=_strict_set_0] run scoreboard players add",
+		"execute as @e[tag=_strict_set_0] if score",
+		"tag @e[tag=_strict_set_0] remove _strict_set_0",
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing entity-set operation %q in %#v", wanted, all)
+		}
+	}
+}
+
+func TestCompileVersion2PrimitiveSetRuntime(t *testing.T) {
+	source := `namespace strict
+
+def combine(left: set[int], right: set[int]) -> set[int]:
+    union: set[int] = left | right
+    shared: set[int] = left & right
+    union.add(5)
+    union.add(5)
+    union.remove(5)
+    union.add(5)
+    present: bool = 5 in union
+    for value: int in shared:
+        say(value)
+    return union
+
+def use() -> None:
+    numbers: set[int] = {1, 2, 3}
+    other: set[int] = {3, 4}
+    result: set[int] = combine(numbers, other)
+    flags: set[bool] = {True, False}
+    words: set[str] = {"a", "b"}
+    words.add("c")
+    words.discard("a")
+    has_b: bool = "b" in words
+    size: int = len(result)
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "strict")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		"items append value {key:\"\",value:0,generation:0}",
+		"scratch.set_result.values merge from storage strict:data sets.v1.values",
+		"unless data storage strict:data sets.v1.values.\"$(key)\" run data remove",
+		"scratch.set_item.generation",
+		"set_returns.r0 set from storage strict:data sets.v2",
+		"sets.v8 set from storage strict:data set_returns.r0",
+		"sets.v10.values.\"b\"",
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing primitive-set command %q in %#v", wanted, all)
+		}
+	}
+	if !output.FunctionMappings[0].ReturnsPrimitiveSet || !output.FunctionMappings[0].Parameters[0].IsPrimitiveSet {
+		t.Fatalf("primitive set mapping = %#v", output.FunctionMappings[0])
+	}
+}
+
+func TestCompileVersion2ListConcatenation(t *testing.T) {
+	source := `namespace strict
+
+def combine(left: list[int], right: list[int]) -> list[int]:
+    result: list[int] = left + right + [5]
+    result += left
+    return result
+
+def use() -> None:
+    first: list[int] = [1, 2]
+    second: list[int] = [3, 4]
+    combined: list[int] = combine(first, second) + first
+
+def nested(a: list[list[int]], b: list[list[int]]) -> list[list[int]]:
+    result: list[list[int]] = a + b
+    return result
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "strict")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		"append from storage strict:data lists.v0[]",
+		"append from storage strict:data list_types.v0[]",
+		"lists.scratch_leaf_",
+		"return_types.r0 set from storage strict:data list_types.v2",
+		"append from storage strict:data returns.r0[]",
+		"append from storage strict:data return_types.r0[]",
+		"data modify storage strict:data lists.v5 set from storage strict:data scratch.list_concat_",
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing list concatenation command %q in %#v", wanted, all)
+		}
 	}
 }
 

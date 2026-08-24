@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Control flow — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>Control flow</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a aria-current="page" href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>Branches and loops</h2></div>
+<p>DataCraft lowers control flow into generated Minecraft functions and <code>execute if</code> commands.</p>
+<div class="docs-grid">
+<article><h3>Conditions</h3>
+<pre><code>if score &gt; 10:
+    say(&#34;high&#34;)
+elif score:
+    say(&#34;positive&#34;)
+else:
+    say(&#34;zero&#34;)
+</code></pre>
+<p>For integers, zero is false and every other value is true. Empty strings and collections are false when converted with <code>bool</code>.</p>
+</article>
+<article><h3>For loops</h3>
+<pre><code>for item in items:
+    say(item)
+</code></pre>
+<p>A loop compiles into a helper function that recursively schedules its next iteration.</p>
+</article>
+<article><h3>While loops</h3>
+<pre><code>while remaining &gt; 0:
+    remaining = remaining - 1
+</code></pre>
+<p>The condition is reevaluated before each recursive iteration.</p>
+</article>
+<article><h3>Loop control</h3>
+<p><code>break</code> exits the nearest loop. <code>continue</code> skips to its next iteration. Returns propagate correctly through generated loop and branch helpers.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

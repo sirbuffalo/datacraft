@@ -1,7 +1,7 @@
 // Package scope discovers lexical scopes and assigns stable IDs to them.
 package scope
 
-import "mccomp/ast"
+import "github.com/sirbuffalo/datacraft/ast"
 
 type Kind string
 

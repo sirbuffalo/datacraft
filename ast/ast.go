@@ -1,6 +1,6 @@
 package ast
 
-import "mccomp/token"
+import "github.com/sirbuffalo/datacraft/token"
 
 type ScopeID uint32
 
@@ -9,18 +9,56 @@ type Node interface {
 }
 
 type Program struct {
+	Version   int
 	Namespace string
 	ScopeID   ScopeID
+	Imports   []*Import
+	Globals   []*Assignment
 	Functions []*Function
+}
+
+type Import struct {
+	Pos       token.Position
+	Namespace string
+	Names     []string
+}
+
+func (i *Import) Position() token.Position { return i.Pos }
+
+type TypeRef struct {
+	Pos      token.Position
+	Name     string
+	Element  *TypeRef
+	Nullable bool
+	Readonly bool
+}
+
+func (t *TypeRef) String() string {
+	if t == nil {
+		return ""
+	}
+	name := t.Name
+	if t.Element != nil {
+		name += "[" + t.Element.String() + "]"
+	}
+	if t.Nullable {
+		name += "?"
+	}
+	if t.Readonly {
+		name = "readonly " + name
+	}
+	return name
 }
 
 type Function struct {
 	Pos            token.Position
 	ScopeID        ScopeID
-	Exported       bool
+	Exposed        bool
 	Name           string
 	Parameters     []string
 	ParameterTypes map[string]string
+	Types          map[string]*TypeRef
+	ReturnType     *TypeRef
 	Body           []Statement
 }
 
@@ -32,12 +70,14 @@ type Statement interface {
 }
 
 type Assignment struct {
-	Pos      token.Position
-	Name     string
-	Index    Expression
-	Indices  []Expression
-	Operator token.Kind
-	Value    Expression
+	Pos          token.Position
+	Name         string
+	Index        Expression
+	Indices      []Expression
+	Operator     token.Kind
+	Value        Expression
+	DeclaredType *TypeRef
+	Constant     bool
 }
 
 func (*Assignment) statement()                 {}
@@ -110,11 +150,12 @@ type ElseIf struct {
 // For describes source-level iteration. The data-pack emitter lowers this to
 // a generated function that conditionally calls itself for the next iteration.
 type For struct {
-	Pos      token.Position
-	ScopeID  ScopeID
-	Variable string
-	Iterable Expression
-	Body     []Statement
+	Pos          token.Position
+	ScopeID      ScopeID
+	Variable     string
+	VariableType *TypeRef
+	Iterable     Expression
+	Body         []Statement
 }
 
 func (*For) statement()                 {}
@@ -172,6 +213,11 @@ type Boolean struct {
 	Value bool
 }
 
+type NoneLiteral struct{ Pos token.Position }
+
+func (*NoneLiteral) expression()                {}
+func (e *NoneLiteral) Position() token.Position { return e.Pos }
+
 func (*Boolean) expression()                {}
 func (e *Boolean) Position() token.Position { return e.Pos }
 
@@ -179,6 +225,14 @@ type List struct {
 	Pos      token.Position
 	Elements []Expression
 }
+
+type Set struct {
+	Pos      token.Position
+	Elements []Expression
+}
+
+func (*Set) expression()                {}
+func (e *Set) Position() token.Position { return e.Pos }
 
 func (*List) expression()                {}
 func (e *List) Position() token.Position { return e.Pos }

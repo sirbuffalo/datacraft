@@ -1,3 +1,4 @@
+version 1
 namespace example
 
 def load():
@@ -15,6 +16,6 @@ def tick():
     reached_limit = counter >= 5
     return reached_limit
 
-export def reset():
+expose def reset():
     global counter
     counter = 0

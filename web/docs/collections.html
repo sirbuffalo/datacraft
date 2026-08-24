@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collections — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>Collections</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a aria-current="page" href="collections.html">Collections</a><a href="entities.html">Entities</a><a href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>Lists and sets</h2></div>
+<p>Collections are typed and may contain nested collections. Lists preserve order; sets preserve uniqueness.</p>
+<div class="docs-grid">
+<article><h3>Lists</h3>
+<pre><code>values: list[int] = [1, 2, 3]
+values[0] = 5
+values.append(8)
+values.insert(1, 6)
+last: int = values.remove()
+first: int = values.remove(0)
+</code></pre>
+<p>Use <code>items[index]</code> for dynamic indexing. Indexed string and list elements can be read, replaced, or removed and returned.</p>
+</article>
+<article><h3>List operations</h3>
+<p><code>+</code> joins two compatible lists. <code>len(values)</code> returns their length. <code>list(value)</code> converts a compatible collection, and nested types such as <code>list[set[int]]</code> remain typed.</p>
+</article>
+<article><h3>Sets</h3>
+<pre><code>all: set[int] = left | right
+common: set[int] = left &amp; right
+</code></pre>
+<p><code>|</code> is union and <code>&amp;</code> is intersection. The same operators work for entity sets, which are represented by tags rather than storage iteration.</p>
+</article>
+<article><h3>Set storage</h3>
+<p>Primitive sets use a JSON object whose keys point to their values with <code>1b</code> membership markers. Entity sets use one generated tag applied to every member.</p>
+</article>
+<article><h3>Iteration</h3>
+<p>Lists iterate by ordered index. Primitive sets iterate over their stored keys. Entity sets iterate by executing as every entity with the set tag.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

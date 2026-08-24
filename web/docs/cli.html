@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Generated from docs/*.md by go run ./cmd/docsgen. Do not edit directly. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CLI — DataCraft</title><link rel="stylesheet" href="../styles.css"></head>
+<body><main class="app-shell docs-shell"><header class="topbar"><div><p class="eyebrow">DATACRAFT V2</p><h1>CLI</h1></div><a class="page-link" href="../index.html">Open compiler</a></header><nav class="docs-nav" aria-label="Documentation pages"><a href="index.html">Overview</a><a href="types.html">Types</a><a href="functions.html">Functions</a><a href="control-flow.html">Control flow</a><a href="collections.html">Collections</a><a href="entities.html">Entities</a><a href="builtins.html">Built-ins</a><a href="commands.html">Commands</a><a aria-current="page" href="cli.html">CLI</a><a href="status.html">Status</a></nav><section class="docs"><div class="docs-intro"><h2>Command-line compiler</h2></div>
+<p>The <code>datacraft</code> command creates, checks, and builds DataCraft projects.</p>
+<div class="docs-grid">
+<article><h3>Create a project</h3>
+<pre><code>datacraft init my-pack
+cd my-pack
+datacraft check
+datacraft build
+</code></pre>
+</article>
+<article><h3>Configuration</h3>
+<pre><code>[pack]
+name = &#34;my_pack&#34;
+description = &#34;Built with DataCraft&#34;
+format = 48
+
+[build]
+source = &#34;src&#34;
+output = &#34;build/my_pack.zip&#34;
+</code></pre>
+<p>Project configuration lives in <code>datacraft.toml</code>. Command-line options override its values.</p>
+</article>
+<article><h3>Build options</h3>
+<ul>
+<li><code>-o</code> or <code>--output</code> chooses a directory or ZIP file.</li>
+<li><code>-n</code> or <code>--name</code> overrides the pack name.</li>
+<li><code>--description</code> overrides the description.</li>
+<li><code>--pack-format</code> selects the Minecraft pack format.</li>
+<li><code>-q</code> or <code>--quiet</code> suppresses success output.</li>
+</ul>
+</article>
+<article><h3>Single files</h3>
+<p><code>datacraft build path/to/main.dcraft</code> compiles one file. A project build discovers all <code>.dcraft</code> files below the configured source directory so imports are available.</p>
+</article>
+<article><h3>Browser projects</h3>
+<p>The web editor automatically saves source files and pack settings in IndexedDB. Existing saves from the older <code>localStorage</code> format are migrated once. **Save project** downloads <code>datacraft.toml</code> and the complete <code>src</code> directory as a ZIP. **Open project** restores a previously saved source ZIP without uploading it to a server.</p>
+<p>Use **Load example** to replace the editor contents with a known-working typed project that demonstrates functions, lists, conditions, and joined output. The example is immediately saved locally and is ready to compile.</p>
+<p>Use the file toolbar to add, rename, or delete source files. Renames must be unique relative paths ending in <code>.dcraft</code>. Deletion asks for confirmation, and the editor always keeps at least one source file in the project.</p>
+</article>
+</div>
+</section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

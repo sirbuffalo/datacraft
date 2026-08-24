@@ -17,8 +17,12 @@ const (
 	Selector   Kind = "SELECTOR"
 	Command    Kind = "COMMAND"
 
+	Version   Kind = "VERSION"
 	Def       Kind = "DEF"
-	Export    Kind = "EXPORT"
+	Expose    Kind = "EXPOSE"
+	Export    Kind = "EXPORT" // Reserved to provide a migration diagnostic.
+	From      Kind = "FROM"
+	Import    Kind = "IMPORT"
 	Namespace Kind = "NAMESPACE"
 	Global    Kind = "GLOBAL"
 	Return    Kind = "RETURN"
@@ -36,6 +40,9 @@ const (
 	And       Kind = "AND"
 	Or        Kind = "OR"
 	Not       Kind = "NOT"
+	Const     Kind = "CONST"
+	Readonly  Kind = "READONLY"
+	None      Kind = "NONE"
 
 	Assign       Kind = "="
 	PlusAssign   Kind = "+="
@@ -61,6 +68,11 @@ const (
 	Colon        Kind = ":"
 	Dot          Kind = "."
 	Ampersand    Kind = "&"
+	Arrow        Kind = "->"
+	Question     Kind = "?"
+	LeftBrace    Kind = "{"
+	RightBrace   Kind = "}"
+	Pipe         Kind = "|"
 )
 
 type Position struct {
@@ -79,8 +91,9 @@ func (t Token) String() string {
 }
 
 var Keywords = map[string]Kind{
-	"def": Def, "export": Export, "namespace": Namespace, "global": Global, "return": Return, "if": If, "elif": Elif, "else": Else,
+	"version": Version, "def": Def, "expose": Expose, "export": Export, "from": From, "import": Import, "namespace": Namespace, "global": Global, "return": Return, "if": If, "elif": Elif, "else": Else,
 	"for": For, "while": While, "break": Break, "continue": Continue, "in": In, "is": Is,
 	"True": True, "False": False, "and": And, "or": Or, "not": Not,
-	"mod": Percent,
+	"mod":   Percent,
+	"const": Const, "readonly": Readonly, "None": None,
 }

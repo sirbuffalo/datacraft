@@ -941,6 +941,53 @@ def load():
 	}
 }
 
+func TestCompileCommandVariableInterpolation(t *testing.T) {
+	source := `namespace demo
+
+def run(count: int, label: str, target: entity, data: nbt, values: list[int]):
+    /give ${target} minecraft:tnt ${count}
+    /say ${label}
+    /data merge storage demo:output result ${data}
+    /say ${values}
+`
+	program, err := parser.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "demo")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		`$give @n[tag=_demo_$(m0_0)_$(m0_1)_$(m0_2)_$(m0_3)] minecraft:tnt $(m1)`,
+		`$say $(m0)`,
+		`$data merge storage demo:output result $(m0)`,
+		`set from storage demo:data strings.v1`,
+		`set from storage demo:data nbt.v3`,
+		`set from storage demo:data lists.v4`,
+		`data remove storage demo:data scratch.command_`,
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing command interpolation output %q in %#v", wanted, all)
+		}
+	}
+}
+
+func TestCommandInterpolationRejectsUnknownVariables(t *testing.T) {
+	program, err := parser.Parse("namespace demo\n\ndef run():\n    /say ${missing}\n")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	_, err = compiler.Compile(program, "demo")
+	if err == nil || !strings.Contains(err.Error(), `undefined command variable "missing"`) {
+		t.Fatalf("Compile() error = %v", err)
+	}
+}
+
 func containsSubstring(commands []string, wanted string) bool {
 	for _, command := range commands {
 		if strings.Contains(command, wanted) {

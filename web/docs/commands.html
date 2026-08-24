@@ -11,10 +11,15 @@
 <p>The browser editor highlights command names, selectors, resources, and DataCraft expressions.</p>
 </article>
 <article><h3>Interpolation</h3>
-<p>Command interpolation is designed to turn typed values into the representation a command expects. Numeric values become macro inputs and entity values become generated tag selectors.</p>
+<p>Use <code>${variable}</code> to insert a typed DataCraft variable into a command:</p>
+<pre><code>def give_tnt(count: int, target: entity):
+    /give ${target} minecraft:tnt ${count}
+</code></pre>
+<p>DataCraft generates a Minecraft macro helper, copies each value into temporary command storage, invokes the helper with <code>function ... with storage</code>, and removes the temporary data afterward. Integer, boolean, string, list, NBT, and singular entity variables are supported. An entity becomes a selector for its registered UUID tag.</p>
+<p>Only variable names are accepted inside <code>${...}</code>. Existing Minecraft <code>$(name)</code> text is left unchanged. Sets cannot be inserted into a single command because they can represent several entities or values.</p>
 </article>
 <article><h3>Safety</h3>
-<p>The type checker rejects interpolation that cannot be represented safely. Generated helper functions clean temporary scoreboard and storage values after their operation.</p>
+<p>The compiler rejects missing variables, malformed interpolation, and values that cannot be represented safely. Generated helper functions clean temporary scoreboard and storage values after their operation.</p>
 </article>
 </div>
 </section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

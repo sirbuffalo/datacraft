@@ -352,6 +352,7 @@ expose def load():
     profile: nbt = {"name": "Alex", "score": result, "flags": [True, False]}
     if result == 5:
         say("DataCraft example: ", profile)
+        /give @s minecraft:tnt ${result}
     else:
         say("Unexpected result: ", result)
 `;

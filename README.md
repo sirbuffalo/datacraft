@@ -26,6 +26,7 @@ expose def load():
 - Multi-file projects with imports
 - Entity values and entity sets backed by generated tags
 - Raw Minecraft commands and syntax highlighting
+- Typed `${variable}` interpolation in raw Minecraft commands
 - Native Go CLI and a static WebAssembly browser editor
 - Project ZIP import/export and IndexedDB autosave in the browser
 

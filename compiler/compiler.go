@@ -226,6 +226,7 @@ type compiler struct {
 	temporary          uint64
 	stringTemporary    uint64
 	entityTemporary    uint64
+	commandTemporary   uint64
 	globalInitializers []string
 	output             Output
 }
@@ -741,7 +742,11 @@ func (c *compiler) compileStatements(statements []ast.Statement, id ast.ScopeID,
 			}
 			commands = append(commands, compiled...)
 		case *ast.Command:
-			commands = append(commands, statement.Text)
+			compiled, err := c.compileCommand(statement, id, function)
+			if err != nil {
+				return nil, err
+			}
+			commands = append(commands, compiled...)
 		case *ast.If:
 			compiled, err := c.compileIf(statement, id, function, returnSignal, breakSignal, continueSignal)
 			if err != nil {
@@ -836,6 +841,82 @@ func (c *compiler) compileStatements(statements []ast.Statement, id ast.ScopeID,
 		}
 	}
 	return commands, nil
+}
+
+func (c *compiler) compileCommand(statement *ast.Command, id ast.ScopeID, function *ast.Function) ([]string, error) {
+	text := statement.Text
+	if !strings.Contains(text, "${") {
+		return []string{text}, nil
+	}
+	path := "scratch.command_" + strconv.FormatUint(c.commandTemporary, 10)
+	c.commandTemporary++
+	var setup []string
+	var rendered strings.Builder
+	for cursor, slot := 0, 0; cursor < len(text); slot++ {
+		start := strings.Index(text[cursor:], "${")
+		if start < 0 {
+			rendered.WriteString(text[cursor:])
+			break
+		}
+		start += cursor
+		rendered.WriteString(text[cursor:start])
+		end := strings.IndexByte(text[start+2:], '}')
+		if end < 0 {
+			return nil, Error{Position: statement.Pos, Message: "unterminated command interpolation"}
+		}
+		end += start + 2
+		name := strings.TrimSpace(text[start+2 : end])
+		if !validInterpolationName(name) {
+			return nil, Error{Position: statement.Pos, Message: "command interpolation expects a variable name"}
+		}
+		variableID, found := c.resolve(name, id, function)
+		if !found {
+			return nil, Error{Position: statement.Pos, Message: fmt.Sprintf("undefined command variable %q", name)}
+		}
+		field := fmt.Sprintf("m%d", slot)
+		switch {
+		case c.variableTypes[variableID] == "entity":
+			for part := 0; part < 4; part++ {
+				setup = append(setup, fmt.Sprintf("data modify storage %s %s.%s_%d set from storage %s entities.v%d.uuid[%d]", c.storageName(), path, field, part, c.storageName(), variableID, part))
+			}
+			rendered.WriteString(fmt.Sprintf("@n[tag=_%s_$(%s_0)_$(%s_1)_$(%s_2)_$(%s_3)]", c.objective, field, field, field, field))
+		case c.isString(variableID):
+			setup = append(setup, fmt.Sprintf("data modify storage %s %s.%s set from storage %s strings.v%d", c.storageName(), path, field, c.storageName(), variableID))
+			rendered.WriteString("$(" + field + ")")
+		case c.isNBT(variableID):
+			setup = append(setup, fmt.Sprintf("data modify storage %s %s.%s set from storage %s nbt.v%d", c.storageName(), path, field, c.storageName(), variableID))
+			rendered.WriteString("$(" + field + ")")
+		case c.isList(variableID):
+			setup = append(setup, fmt.Sprintf("data modify storage %s %s.%s set from storage %s lists.v%d", c.storageName(), path, field, c.storageName(), variableID))
+			rendered.WriteString("$(" + field + ")")
+		case c.isEntitySet(variableID) || c.isPrimitiveSet(variableID):
+			return nil, Error{Position: statement.Pos, Message: fmt.Sprintf("set variable %q cannot be interpolated into one command", name)}
+		default:
+			setup = append(setup, fmt.Sprintf("execute store result storage %s %s.%s int 1 run scoreboard players get %s %s", c.storageName(), path, field, variableHolder(variableID), c.objective))
+			rendered.WriteString("$(" + field + ")")
+		}
+		cursor = end + 1
+	}
+	helper := c.reserveInternalFunction()
+	c.output.Functions[helper] = []string{"$" + rendered.String()}
+	setup = append(setup,
+		fmt.Sprintf("function %s:%s with storage %s %s", c.functionNamespace, helper, c.storageName(), path),
+		fmt.Sprintf("data remove storage %s %s", c.storageName(), path),
+	)
+	return setup, nil
+}
+
+func validInterpolationName(name string) bool {
+	if name == "" || !((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z') || name[0] == '_') {
+		return false
+	}
+	for index := 1; index < len(name); index++ {
+		character := name[index]
+		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *compiler) compileIf(statement *ast.If, parentID ast.ScopeID, function *ast.Function, returnSignal, breakSignal, continueSignal *value) ([]string, error) {

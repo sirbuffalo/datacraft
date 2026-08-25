@@ -37,7 +37,14 @@ name: str = target[&#34;CustomName&#34;]
 memories: nbt = target[&#34;Brain&#34;][&#34;memories&#34;]
 effects: list[nbt] = target[&#34;active_effects&#34;]
 </code></pre>
-<p>DataCraft resolves the entity through its registered UUID tag and emits <code>data get entity</code> or <code>data modify ... set from entity</code> as appropriate for the destination type. Any NBT list or array can use <code>list[int]</code>, <code>list[bool]</code>, <code>list[str]</code>, or <code>list[nbt]</code>; DataCraft generates matching list metadata dynamically for indexing and iteration. Entity NBT paths are currently read-only and their keys must be string literals.</p>
+<p>DataCraft resolves the entity through its registered UUID tag and emits <code>data get entity</code> or <code>data modify ... set from entity</code> as appropriate for the destination type. Any NBT list or array can use <code>list[int]</code>, <code>list[bool]</code>, <code>list[str]</code>, or <code>list[nbt]</code>; DataCraft generates matching list metadata dynamically for indexing and iteration. Entity NBT keys must be string literals.</p>
+<p>Entity NBT fields are writable using the same bracket-only paths:</p>
+<pre><code>target[&#34;Health&#34;] = 10
+target[&#34;CustomName&#34;] = &#34;Alex&#34;
+target[&#34;Brain&#34;][&#34;memories&#34;] = {&#34;home&#34;: [1, 2, 3]}
+target[&#34;active_effects&#34;] = effects
+</code></pre>
+<p>The assigned value may be an NBT-compatible literal or an <code>int</code>, <code>bool</code>, <code>str</code>, <code>list</code>, or <code>nbt</code> variable. DataCraft stages the value in temporary storage, resolves the entity by its registered UUID tag, writes the field, and removes the temporary data. Entity NBT keys must be string literals, and compound fields still use bracket syntax rather than property syntax.</p>
 </article>
 </div>
 </section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

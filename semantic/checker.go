@@ -166,6 +166,14 @@ func (c *checker) checkStatements(statements []ast.Statement, scope map[string]b
 			if current.Constant {
 				return Error{statement.Pos, fmt.Sprintf("cannot assign to constant %q", statement.Name)}
 			}
+			if current.Global {
+				if _, writable := c.writableGlobals[statement.Name]; !writable {
+					return Error{statement.Pos, fmt.Sprintf("assigning namespace global %q requires 'global %s'", statement.Name, statement.Name)}
+				}
+			}
+			if current.Type.Readonly && statement.Index != nil {
+				return Error{statement.Pos, fmt.Sprintf("cannot mutate readonly %s", current.Type.String())}
+			}
 			if current.Type.Name == "nbt" && statement.Index != nil {
 				if statement.Operator != token.Assign {
 					return Error{statement.Pos, "NBT fields only support '=' assignment"}
@@ -180,13 +188,19 @@ func (c *checker) checkStatements(statements []ast.Statement, scope map[string]b
 				}
 				continue
 			}
-			if current.Global {
-				if _, writable := c.writableGlobals[statement.Name]; !writable {
-					return Error{statement.Pos, fmt.Sprintf("assigning namespace global %q requires 'global %s'", statement.Name, statement.Name)}
+			if current.Type.Name == "entity" && statement.Index != nil {
+				if statement.Operator != token.Assign {
+					return Error{statement.Pos, "entity NBT fields only support '=' assignment"}
 				}
-			}
-			if current.Type.Readonly && statement.Index != nil {
-				return Error{statement.Pos, fmt.Sprintf("cannot mutate readonly %s", current.Type.String())}
+				for _, index := range statement.Indices {
+					if _, ok := index.(*ast.String); !ok {
+						return Error{index.Position(), "entity NBT keys must be string literals"}
+					}
+				}
+				if err := c.validateNBTValue(statement.Value, scope); err != nil {
+					return err
+				}
+				continue
 			}
 			actual, err := c.expressionType(statement.Value, scope, &current.Type)
 			if err != nil {

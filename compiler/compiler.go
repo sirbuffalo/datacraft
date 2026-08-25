@@ -343,6 +343,11 @@ func (c *compiler) collectStatements(statements []ast.Statement, id ast.ScopeID,
 				variableID = c.declare(targetScope, statement.Name)
 			}
 			c.applyTypeRef(variableID, statement.DeclaredType)
+			// Indexed assignment mutates a value inside the declared container or
+			// entity. Its right-hand side must not change the root variable's type.
+			if statement.Index != nil {
+				continue
+			}
 			if _, list := statement.Value.(*ast.List); list {
 				c.listVariables[variableID] = struct{}{}
 				c.variableTypes[variableID] = "list"
@@ -1242,6 +1247,9 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 		if c.isNBT(variableID) {
 			return c.compileNBTFieldAssignment(statement, variableID, id, function)
 		}
+		if c.variableTypes[variableID] == "entity" {
+			return c.compileEntityDataWriteAssignment(statement, variableID, id, function)
+		}
 		return c.compileListItemAssignment(statement, variableID, id, function)
 	}
 	if _, none := statement.Value.(*ast.NoneLiteral); none {
@@ -1564,6 +1572,49 @@ func (c *compiler) compileEntityDataReadAssignment(destination, entityID uint32,
 	commands = append(commands, after...)
 	commands = append(commands, fmt.Sprintf("data remove storage %s %s", storage, scratch))
 	return commands
+}
+
+func (c *compiler) compileEntityDataWriteAssignment(statement *ast.Assignment, entityID uint32, id ast.ScopeID, function *ast.Function) ([]string, error) {
+	if statement.Operator != token.Assign {
+		return nil, Error{Position: statement.Pos, Message: "entity NBT fields only support '=' assignment"}
+	}
+	indices := statement.Indices
+	if len(indices) == 0 {
+		indices = []ast.Expression{statement.Index}
+	}
+	path := ""
+	for _, index := range indices {
+		key, ok := index.(*ast.String)
+		if !ok {
+			return nil, Error{Position: index.Position(), Message: "entity NBT keys must be string literals"}
+		}
+		encoded, _ := json.Marshal(key.Value)
+		if path != "" {
+			path += "."
+		}
+		path += string(encoded)
+	}
+
+	storage := c.storageName()
+	scratch := "scratch.entity_write_" + strconv.FormatUint(c.entityTemporary, 10)
+	c.entityTemporary++
+	valuePath := scratch + ".value"
+	commands, err := c.compileNBTValueToPath(statement.Value, valuePath, id, function)
+	if err != nil {
+		return nil, err
+	}
+	for part := 0; part < 4; part++ {
+		commands = append(commands, fmt.Sprintf("data modify storage %s %s.uuid%d set from storage %s entities.v%d.uuid[%d]", storage, scratch, part, storage, entityID, part))
+	}
+	selector := fmt.Sprintf("@n[tag=_%s_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)]", c.objective)
+	write := fmt.Sprintf("$execute as %s run data modify entity @s %s set from storage %s %s", selector, path, storage, valuePath)
+	helper := c.reserveInternalFunction()
+	c.output.Functions[helper] = []string{write}
+	commands = append(commands,
+		fmt.Sprintf("function %s:%s with storage %s %s", c.functionNamespace, helper, storage, scratch),
+		fmt.Sprintf("data remove storage %s %s", storage, scratch),
+	)
+	return commands, nil
 }
 
 func (c *compiler) compileNBTFieldAssignment(statement *ast.Assignment, variableID uint32, id ast.ScopeID, function *ast.Function) ([]string, error) {

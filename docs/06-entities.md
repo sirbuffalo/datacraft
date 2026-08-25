@@ -29,4 +29,4 @@ An entity set is a generated tag shared by every member. Union, intersection, in
 When an entity value is interpolated into a raw command, DataCraft emits an appropriate tag selector. Runtime helpers centralize common register, resolve, retag, and cleanup operations.
 
 ## Reading entity NBT
-Use `uuid: list[int] = target["UUID"]` to read the entity's four-integer UUID. Other NBT lists can use a compatible typed list such as `effects: list[nbt] = target["active_effects"]`. Scalar and nested paths use `int`, `bool`, `str`, or `nbt`. Property access such as `target.UUID` is not supported.
+Use `uuid: list[int] = target["UUID"]` to read the entity's four-integer UUID. Other NBT lists can use a compatible typed list such as `effects: list[nbt] = target["active_effects"]`. Scalar and nested paths use `int`, `bool`, `str`, or `nbt`. Fields are writable with assignments such as `target["Health"] = 10` and `target["Brain"]["memories"] = data`. Property access such as `target.UUID` is not supported.

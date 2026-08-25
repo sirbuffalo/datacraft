@@ -21,7 +21,7 @@
 <p>When an entity value is interpolated into a raw command, DataCraft emits an appropriate tag selector. Runtime helpers centralize common register, resolve, retag, and cleanup operations.</p>
 </article>
 <article><h3>Reading entity NBT</h3>
-<p>Use <code>uuid: list[int] = target[&#34;UUID&#34;]</code> to read the entity&#39;s four-integer UUID. Other NBT lists can use a compatible typed list such as <code>effects: list[nbt] = target[&#34;active_effects&#34;]</code>. Scalar and nested paths use <code>int</code>, <code>bool</code>, <code>str</code>, or <code>nbt</code>. Property access such as <code>target.UUID</code> is not supported.</p>
+<p>Use <code>uuid: list[int] = target[&#34;UUID&#34;]</code> to read the entity&#39;s four-integer UUID. Other NBT lists can use a compatible typed list such as <code>effects: list[nbt] = target[&#34;active_effects&#34;]</code>. Scalar and nested paths use <code>int</code>, <code>bool</code>, <code>str</code>, or <code>nbt</code>. Fields are writable with assignments such as <code>target[&#34;Health&#34;] = 10</code> and <code>target[&#34;Brain&#34;][&#34;memories&#34;] = data</code>. Property access such as <code>target.UUID</code> is not supported.</p>
 </article>
 </div>
 </section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

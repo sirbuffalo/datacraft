@@ -1016,6 +1016,44 @@ def inspect():
 	}
 }
 
+func TestCompileEntityNBTBracketWrites(t *testing.T) {
+	program, err := parser.Parse(`namespace demo
+
+def update():
+    target: entity? = @s
+    health: int = 10
+    name: str = "Alex"
+    effects: list[nbt] = []
+    target["Health"] = health
+    target["CustomName"] = name
+    target["Brain"]["memories"] = {"home": [1, 2, 3]}
+    target["active_effects"] = effects
+`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "demo")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		`scratch.entity_write_`,
+		`set from storage demo:data strings.v2`,
+		`set from storage demo:data lists.v3`,
+		`$execute as @n[tag=_demo_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)] run data modify entity @s "Health" set from storage demo:data scratch.entity_write_`,
+		`data modify entity @s "Brain"."memories" set from storage`,
+		`data remove storage demo:data scratch.entity_write_`,
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing entity NBT write command %q in %#v", wanted, all)
+		}
+	}
+}
+
 func TestCommandInterpolationRejectsUnknownVariables(t *testing.T) {
 	program, err := parser.Parse("namespace demo\n\ndef run():\n    /say ${missing}\n")
 	if err != nil {

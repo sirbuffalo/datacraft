@@ -50,4 +50,15 @@ memories: nbt = target["Brain"]["memories"]
 effects: list[nbt] = target["active_effects"]
 ```
 
-DataCraft resolves the entity through its registered UUID tag and emits `data get entity` or `data modify ... set from entity` as appropriate for the destination type. Any NBT list or array can use `list[int]`, `list[bool]`, `list[str]`, or `list[nbt]`; DataCraft generates matching list metadata dynamically for indexing and iteration. Entity NBT paths are currently read-only and their keys must be string literals.
+DataCraft resolves the entity through its registered UUID tag and emits `data get entity` or `data modify ... set from entity` as appropriate for the destination type. Any NBT list or array can use `list[int]`, `list[bool]`, `list[str]`, or `list[nbt]`; DataCraft generates matching list metadata dynamically for indexing and iteration. Entity NBT keys must be string literals.
+
+Entity NBT fields are writable using the same bracket-only paths:
+
+```dcraft
+target["Health"] = 10
+target["CustomName"] = "Alex"
+target["Brain"]["memories"] = {"home": [1, 2, 3]}
+target["active_effects"] = effects
+```
+
+The assigned value may be an NBT-compatible literal or an `int`, `bool`, `str`, `list`, or `nbt` variable. DataCraft stages the value in temporary storage, resolves the entity by its registered UUID tag, writes the field, and removes the temporary data. Entity NBT keys must be string literals, and compound fields still use bracket syntax rather than property syntax.

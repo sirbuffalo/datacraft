@@ -109,6 +109,16 @@ def inspect():
 `, "entity NBT keys must be string literals")
 }
 
+func TestEntityNBTWritesRespectGlobal(t *testing.T) {
+	checkError(t, `namespace demo
+
+target: entity? = @s
+
+def update():
+    target["Health"] = 10
+`, "requires 'global target'")
+}
+
 func TestVersion2NamespaceGlobalWritesRequireGlobal(t *testing.T) {
 	checkError(t, `namespace strict
 

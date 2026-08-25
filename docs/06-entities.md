@@ -27,3 +27,6 @@ An entity set is a generated tag shared by every member. Union, intersection, in
 
 ## Command selectors
 When an entity value is interpolated into a raw command, DataCraft emits an appropriate tag selector. Runtime helpers centralize common register, resolve, retag, and cleanup operations.
+
+## Reading entity NBT
+Use bracket access such as `target["UUID"]` or `target["Brain"]["memories"]`. The result must be assigned to a typed `int`, `bool`, `str`, or `nbt` variable. Property access such as `target.UUID` is not supported.

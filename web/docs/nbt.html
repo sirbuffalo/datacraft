@@ -28,5 +28,15 @@ particles: bool = profile[&#34;settings&#34;][&#34;particles&#34;]
 <article><h3>Output and length</h3>
 <p><code>say(profile)</code> displays the compound, while <code>say(profile[&#34;name&#34;])</code> displays a selected field. <code>len(profile)</code> returns the number of keys in the compound.</p>
 </article>
+<article><h3>Entity data</h3>
+<p>Entity values expose their Minecraft NBT through the same bracket-only syntax:</p>
+<pre><code>target: entity? = @s
+uuid: nbt = target[&#34;UUID&#34;]
+health: int = target[&#34;Health&#34;]
+name: str = target[&#34;CustomName&#34;]
+memories: nbt = target[&#34;Brain&#34;][&#34;memories&#34;]
+</code></pre>
+<p>DataCraft resolves the entity through its registered UUID tag and emits <code>data get entity</code> or <code>data modify ... set from entity</code> as appropriate for the destination type. Entity NBT paths are currently read-only, their keys must be string literals, and the destination must be <code>int</code>, <code>bool</code>, <code>str</code>, or <code>nbt</code>.</p>
+</article>
 </div>
 </section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

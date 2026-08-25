@@ -25,6 +25,7 @@ expose def load():
 - Internal ID-based functions and stable public wrappers using `expose`
 - Multi-file projects with imports
 - Entity values and entity sets backed by generated tags
+- Typed entity NBT reads such as `target["UUID"]`
 - Raw Minecraft commands and syntax highlighting
 - Typed `${variable}` interpolation in raw Minecraft commands
 - Native Go CLI and a static WebAssembly browser editor

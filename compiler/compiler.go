@@ -417,7 +417,7 @@ func (c *compiler) collectStatements(statements []ast.Statement, id ast.ScopeID,
 					delete(c.variableTypes, variableID)
 				}
 			}
-			if statement.Index != nil && !c.isNBT(variableID) {
+			if statement.Index != nil && !c.isNBT(variableID) && c.variableTypes[variableID] != "entity" {
 				c.listVariables[variableID] = struct{}{}
 			}
 			c.markListUses(statement.Value, id, function)
@@ -489,7 +489,7 @@ func (c *compiler) markListUses(expression ast.Expression, id ast.ScopeID, funct
 	case *ast.Index:
 		if target, ok := expression.Target.(*ast.Identifier); ok {
 			if variableID, found := c.resolve(target.Name, id, function); found {
-				if !c.isNBT(variableID) {
+				if !c.isNBT(variableID) && c.variableTypes[variableID] != "entity" {
 					c.listVariables[variableID] = struct{}{}
 				}
 			}
@@ -1242,6 +1242,11 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 	if _, none := statement.Value.(*ast.NoneLiteral); none {
 		return c.compileNoneAssignment(variableID), nil
 	}
+	if indexed, ok := statement.Value.(*ast.Index); ok {
+		if entityID, path, found := c.entityIndexPath(indexed, id, function); found {
+			return c.compileEntityDataReadAssignment(variableID, entityID, path), nil
+		}
+	}
 	if c.isNBT(variableID) {
 		if statement.Operator != token.Assign {
 			return nil, Error{Position: statement.Pos, Message: "NBT assignment only supports '='"}
@@ -1482,6 +1487,57 @@ func (c *compiler) nbtIndexPath(indexed *ast.Index, id ast.ScopeID, function *as
 		path += "." + string(encoded)
 	}
 	return path, variableID, true
+}
+
+func (c *compiler) entityIndexPath(indexed *ast.Index, id ast.ScopeID, function *ast.Function) (uint32, string, bool) {
+	root, indices := compilerIndexedRoot(indexed)
+	if root == nil {
+		return 0, "", false
+	}
+	variableID, found := c.resolve(root.Name, id, function)
+	if !found || c.variableTypes[variableID] != "entity" {
+		return 0, "", false
+	}
+	path := ""
+	for _, index := range indices {
+		key, ok := index.(*ast.String)
+		if !ok {
+			return 0, "", false
+		}
+		encoded, _ := json.Marshal(key.Value)
+		if path != "" {
+			path += "."
+		}
+		path += string(encoded)
+	}
+	return variableID, path, path != ""
+}
+
+func (c *compiler) compileEntityDataReadAssignment(destination, entityID uint32, path string) []string {
+	storage := c.storageName()
+	scratch := "scratch.entity_read_" + strconv.FormatUint(c.entityTemporary, 10)
+	c.entityTemporary++
+	commands := make([]string, 0, 7)
+	for part := 0; part < 4; part++ {
+		commands = append(commands, fmt.Sprintf("data modify storage %s %s.uuid%d set from storage %s entities.v%d.uuid[%d]", storage, scratch, part, storage, entityID, part))
+	}
+	selector := fmt.Sprintf("@n[tag=_%s_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)]", c.objective)
+	var read string
+	switch {
+	case c.isNBT(destination):
+		read = fmt.Sprintf("execute as %s run data modify storage %s nbt.v%d set from entity @s %s", selector, storage, destination, path)
+	case c.isString(destination):
+		read = fmt.Sprintf("execute as %s run data modify storage %s strings.v%d set from entity @s %s", selector, storage, destination, path)
+	default:
+		read = fmt.Sprintf("execute as %s store result score %s %s run data get entity @s %s 1", selector, variableHolder(destination), c.objective, path)
+	}
+	helper := c.reserveInternalFunction()
+	c.output.Functions[helper] = []string{"$" + read}
+	commands = append(commands,
+		fmt.Sprintf("function %s:%s with storage %s %s", c.functionNamespace, helper, storage, scratch),
+		fmt.Sprintf("data remove storage %s %s", storage, scratch),
+	)
+	return commands
 }
 
 func (c *compiler) compileNBTFieldAssignment(statement *ast.Assignment, variableID uint32, id ast.ScopeID, function *ast.Function) ([]string, error) {

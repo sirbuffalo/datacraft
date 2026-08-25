@@ -422,6 +422,19 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 		}
 		return Type{Name: "int"}, nil
 	case *ast.Index:
+		if root, indices := indexedRoot(expression); root != nil {
+			if binding, found := scope[root.Name]; found && (binding.Type.Name == "nbt" || binding.Type.Name == "entity") {
+				for _, index := range indices {
+					if _, ok := index.(*ast.String); !ok {
+						return Type{}, Error{index.Position(), binding.Type.Name + " NBT keys must be string literals"}
+					}
+				}
+				if expected == nil || (binding.Type.Name == "entity" && expected.Name != "int" && expected.Name != "bool" && expected.Name != "str" && expected.Name != "nbt") {
+					return Type{}, Error{expression.Pos, "an " + binding.Type.Name + " NBT read requires an expected type"}
+				}
+				return *expected, nil
+			}
+		}
 		target, err := c.expressionType(expression.Target, scope, nil)
 		if err != nil {
 			return Type{}, err
@@ -439,6 +452,15 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 			}
 			return *expected, nil
 		}
+		if target.Name == "entity" {
+			if _, ok := expression.Index.(*ast.String); !ok {
+				return Type{}, Error{expression.Index.Position(), "entity NBT keys must be string literals"}
+			}
+			if expected == nil || (expected.Name != "int" && expected.Name != "bool" && expected.Name != "str" && expected.Name != "nbt") {
+				return Type{}, Error{expression.Pos, "an entity NBT read requires an int, bool, str, or nbt destination"}
+			}
+			return *expected, nil
+		}
 		if target.Name != "list" || target.Element == nil {
 			return Type{}, Error{expression.Pos, "only lists and NBT compounds support indexing"}
 		}
@@ -450,6 +472,20 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 		return c.callType(expression, scope)
 	}
 	return Type{}, Error{expression.Position(), fmt.Sprintf("cannot type expression %T", expression)}
+}
+
+func indexedRoot(expression *ast.Index) (*ast.Identifier, []ast.Expression) {
+	indices := []ast.Expression{expression.Index}
+	target := expression.Target
+	for {
+		if parent, ok := target.(*ast.Index); ok {
+			indices = append([]ast.Expression{parent.Index}, indices...)
+			target = parent.Target
+			continue
+		}
+		root, _ := target.(*ast.Identifier)
+		return root, indices
+	}
 }
 
 func (c *checker) validateNBTValue(expression ast.Expression, scope map[string]binding) error {

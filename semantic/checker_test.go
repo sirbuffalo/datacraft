@@ -84,6 +84,30 @@ def load():
 `, "None and entities are not allowed")
 }
 
+func TestEntityNBTUsesTypedBracketReads(t *testing.T) {
+	program, err := parser.Parse(`namespace demo
+
+def inspect():
+    target: entity? = @s
+    uuid: nbt = target["UUID"]
+    health: int = target["Health"]
+    name: str = target["CustomName"]
+    memory: nbt = target["Brain"]["memories"]
+`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if err = semantic.Check(program); err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+
+	checkError(t, `def bad():
+    target: entity? = @s
+    key: str = "UUID"
+    uuid: nbt = target[key]
+`, "entity NBT keys must be string literals")
+}
+
 func TestVersion2NamespaceGlobalWritesRequireGlobal(t *testing.T) {
 	checkError(t, `namespace strict
 

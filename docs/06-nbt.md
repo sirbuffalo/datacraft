@@ -37,3 +37,16 @@ Whole NBT variables can be passed to and returned from functions. Structured ret
 
 ## Output and length
 `say(profile)` displays the compound, while `say(profile["name"])` displays a selected field. `len(profile)` returns the number of keys in the compound.
+
+## Entity data
+Entity values expose their Minecraft NBT through the same bracket-only syntax:
+
+```dcraft
+target: entity? = @s
+uuid: nbt = target["UUID"]
+health: int = target["Health"]
+name: str = target["CustomName"]
+memories: nbt = target["Brain"]["memories"]
+```
+
+DataCraft resolves the entity through its registered UUID tag and emits `data get entity` or `data modify ... set from entity` as appropriate for the destination type. Entity NBT paths are currently read-only, their keys must be string literals, and the destination must be `int`, `bool`, `str`, or `nbt`.

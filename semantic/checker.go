@@ -429,7 +429,8 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 						return Type{}, Error{index.Position(), binding.Type.Name + " NBT keys must be string literals"}
 					}
 				}
-				if expected == nil || (binding.Type.Name == "entity" && expected.Name != "int" && expected.Name != "bool" && expected.Name != "str" && expected.Name != "nbt") {
+				entityList := binding.Type.Name == "entity" && expected != nil && expected.Name == "list" && expected.Element != nil && (expected.Element.Name == "int" || expected.Element.Name == "bool" || expected.Element.Name == "str" || expected.Element.Name == "nbt")
+				if expected == nil || (binding.Type.Name == "entity" && expected.Name != "int" && expected.Name != "bool" && expected.Name != "str" && expected.Name != "nbt" && !entityList) {
 					return Type{}, Error{expression.Pos, "an " + binding.Type.Name + " NBT read requires an expected type"}
 				}
 				return *expected, nil
@@ -456,8 +457,9 @@ func (c *checker) expressionType(expression ast.Expression, scope map[string]bin
 			if _, ok := expression.Index.(*ast.String); !ok {
 				return Type{}, Error{expression.Index.Position(), "entity NBT keys must be string literals"}
 			}
-			if expected == nil || (expected.Name != "int" && expected.Name != "bool" && expected.Name != "str" && expected.Name != "nbt") {
-				return Type{}, Error{expression.Pos, "an entity NBT read requires an int, bool, str, or nbt destination"}
+			entityList := expected != nil && expected.Name == "list" && expected.Element != nil && (expected.Element.Name == "int" || expected.Element.Name == "bool" || expected.Element.Name == "str" || expected.Element.Name == "nbt")
+			if expected == nil || (expected.Name != "int" && expected.Name != "bool" && expected.Name != "str" && expected.Name != "nbt" && !entityList) {
+				return Type{}, Error{expression.Pos, "an entity NBT read requires an int, bool, str, nbt, or supported list destination"}
 			}
 			return *expected, nil
 		}

@@ -31,12 +31,13 @@ particles: bool = profile[&#34;settings&#34;][&#34;particles&#34;]
 <article><h3>Entity data</h3>
 <p>Entity values expose their Minecraft NBT through the same bracket-only syntax:</p>
 <pre><code>target: entity? = @s
-uuid: nbt = target[&#34;UUID&#34;]
+uuid: list[int] = target[&#34;UUID&#34;]
 health: int = target[&#34;Health&#34;]
 name: str = target[&#34;CustomName&#34;]
 memories: nbt = target[&#34;Brain&#34;][&#34;memories&#34;]
+effects: list[nbt] = target[&#34;active_effects&#34;]
 </code></pre>
-<p>DataCraft resolves the entity through its registered UUID tag and emits <code>data get entity</code> or <code>data modify ... set from entity</code> as appropriate for the destination type. Entity NBT paths are currently read-only, their keys must be string literals, and the destination must be <code>int</code>, <code>bool</code>, <code>str</code>, or <code>nbt</code>.</p>
+<p>DataCraft resolves the entity through its registered UUID tag and emits <code>data get entity</code> or <code>data modify ... set from entity</code> as appropriate for the destination type. Any NBT list or array can use <code>list[int]</code>, <code>list[bool]</code>, <code>list[str]</code>, or <code>list[nbt]</code>; DataCraft generates matching list metadata dynamically for indexing and iteration. Entity NBT paths are currently read-only and their keys must be string literals.</p>
 </article>
 </div>
 </section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>

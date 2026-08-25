@@ -982,10 +982,11 @@ func TestCompileEntityNBTBracketReads(t *testing.T) {
 
 def inspect():
     target: entity? = @s
-    uuid: nbt = target["UUID"]
+    uuid: list[int] = target["UUID"]
     health: int = target["Health"]
     name: str = target["CustomName"]
     memory: nbt = target["Brain"]["memories"]
+    effects: list[nbt] = target["active_effects"]
 `)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -999,10 +1000,14 @@ def inspect():
 		all = append(all, commands...)
 	}
 	for _, wanted := range []string{
-		`$execute as @n[tag=_demo_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)] run data modify storage demo:data nbt.v1 set from entity @s "UUID"`,
+		`$execute as @n[tag=_demo_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)] run data modify storage demo:data lists.v1 set from entity @s "UUID"`,
+		`data modify storage demo:data list_types.v1 set value []`,
+		`list_types.v1 append value "int"`,
 		`store result score #v2 demo run data get entity @s "Health" 1`,
 		`data modify storage demo:data strings.v3 set from entity @s "CustomName"`,
 		`nbt.v4 set from entity @s "Brain"."memories"`,
+		`lists.v5 set from entity @s "active_effects"`,
+		`list_types.v5 append value "nbt"`,
 		`data remove storage demo:data scratch.entity_read_`,
 	} {
 		if !containsSubstring(all, wanted) {

@@ -106,6 +106,7 @@ func CompileWithImports(program *ast.Program, functionNamespace string, imports 
 		stringVariables:   make(map[uint32]struct{}),
 		variableTypes:     make(map[uint32]string),
 		listElementTypes:  make(map[uint32][]string),
+		listDeclaredTypes: make(map[uint32]string),
 		variantVariables:  make(map[uint32]struct{}),
 		entityVariables:   make(map[uint32]struct{}),
 		entityLists:       make(map[uint32]struct{}),
@@ -212,6 +213,7 @@ type compiler struct {
 	stringVariables    map[uint32]struct{}
 	variableTypes      map[uint32]string
 	listElementTypes   map[uint32][]string
+	listDeclaredTypes  map[uint32]string
 	variantVariables   map[uint32]struct{}
 	entityVariables    map[uint32]struct{}
 	entityLists        map[uint32]struct{}
@@ -320,6 +322,9 @@ func (c *compiler) applyTypeRef(variableID uint32, ref *ast.TypeRef) {
 	if ref.Name == "list" && ref.Element != nil && ref.Element.Name == "entity" {
 		c.entityLists[variableID] = struct{}{}
 		c.listElementTypes[variableID] = []string{"entity"}
+	}
+	if ref.Name == "list" && ref.Element != nil {
+		c.listDeclaredTypes[variableID] = ref.Element.Name
 	}
 	c.applyDeclaredType(variableID, ref.Name)
 }
@@ -1523,7 +1528,27 @@ func (c *compiler) compileEntityDataReadAssignment(destination, entityID uint32,
 	}
 	selector := fmt.Sprintf("@n[tag=_%s_$(uuid0)_$(uuid1)_$(uuid2)_$(uuid3)]", c.objective)
 	var read string
+	var after []string
 	switch {
+	case c.isList(destination):
+		read = fmt.Sprintf("execute as %s run data modify storage %s lists.v%d set from entity @s %s", selector, storage, destination, path)
+		elementType := c.listDeclaredTypes[destination]
+		if elementType == "" {
+			elementType = "nbt"
+		}
+		encodedType, _ := json.Marshal(elementType)
+		remaining := c.newTemporary()
+		metadataHelper := c.reserveInternalFunction()
+		c.output.Functions[metadataHelper] = []string{
+			fmt.Sprintf("execute if score %s %s matches 1.. run data modify storage %s list_types.v%d append value %s", remaining.holder, remaining.objective, storage, destination, encodedType),
+			fmt.Sprintf("execute if score %s %s matches 1.. run scoreboard players remove %s %s 1", remaining.holder, remaining.objective, remaining.holder, remaining.objective),
+			fmt.Sprintf("execute if score %s %s matches 1.. run function %s:%s", remaining.holder, remaining.objective, c.functionNamespace, metadataHelper),
+		}
+		after = append(after,
+			fmt.Sprintf("data modify storage %s list_types.v%d set value []", storage, destination),
+			fmt.Sprintf("execute store result score %s %s run data get storage %s lists.v%d", remaining.holder, remaining.objective, storage, destination),
+			fmt.Sprintf("function %s:%s", c.functionNamespace, metadataHelper),
+		)
 	case c.isNBT(destination):
 		read = fmt.Sprintf("execute as %s run data modify storage %s nbt.v%d set from entity @s %s", selector, storage, destination, path)
 	case c.isString(destination):
@@ -1535,8 +1560,9 @@ func (c *compiler) compileEntityDataReadAssignment(destination, entityID uint32,
 	c.output.Functions[helper] = []string{"$" + read}
 	commands = append(commands,
 		fmt.Sprintf("function %s:%s with storage %s %s", c.functionNamespace, helper, storage, scratch),
-		fmt.Sprintf("data remove storage %s %s", storage, scratch),
 	)
+	commands = append(commands, after...)
+	commands = append(commands, fmt.Sprintf("data remove storage %s %s", storage, scratch))
 	return commands
 }
 

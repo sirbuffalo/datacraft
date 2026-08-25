@@ -89,10 +89,11 @@ func TestEntityNBTUsesTypedBracketReads(t *testing.T) {
 
 def inspect():
     target: entity? = @s
-    uuid: nbt = target["UUID"]
+    uuid: list[int] = target["UUID"]
     health: int = target["Health"]
     name: str = target["CustomName"]
     memory: nbt = target["Brain"]["memories"]
+    effects: list[nbt] = target["active_effects"]
 `)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
@@ -104,7 +105,7 @@ def inspect():
 	checkError(t, `def bad():
     target: entity? = @s
     key: str = "UUID"
-    uuid: nbt = target[key]
+    uuid: list[int] = target[key]
 `, "entity NBT keys must be string literals")
 }
 

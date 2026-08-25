@@ -43,10 +43,11 @@ Entity values expose their Minecraft NBT through the same bracket-only syntax:
 
 ```dcraft
 target: entity? = @s
-uuid: nbt = target["UUID"]
+uuid: list[int] = target["UUID"]
 health: int = target["Health"]
 name: str = target["CustomName"]
 memories: nbt = target["Brain"]["memories"]
+effects: list[nbt] = target["active_effects"]
 ```
 
-DataCraft resolves the entity through its registered UUID tag and emits `data get entity` or `data modify ... set from entity` as appropriate for the destination type. Entity NBT paths are currently read-only, their keys must be string literals, and the destination must be `int`, `bool`, `str`, or `nbt`.
+DataCraft resolves the entity through its registered UUID tag and emits `data get entity` or `data modify ... set from entity` as appropriate for the destination type. Any NBT list or array can use `list[int]`, `list[bool]`, `list[str]`, or `list[nbt]`; DataCraft generates matching list metadata dynamically for indexing and iteration. Entity NBT paths are currently read-only and their keys must be string literals.

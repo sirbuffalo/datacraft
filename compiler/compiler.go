@@ -1264,6 +1264,26 @@ func (c *compiler) compileAssignment(statement *ast.Assignment, id ast.ScopeID, 
 		if statement.Operator != token.Assign {
 			return nil, Error{Position: statement.Pos, Message: "NBT assignment only supports '='"}
 		}
+		if indexed, ok := statement.Value.(*ast.Index); ok {
+			root, indices := compilerIndexedRoot(indexed)
+			if root != nil {
+				if listID, found := c.resolve(root.Name, id, function); found && c.isList(listID) {
+					commands, sourcePath, dynamic, err := c.compileIndexPath(fmt.Sprintf("lists.v%d", listID), indices, id, function)
+					if err != nil {
+						return nil, err
+					}
+					copyCommand := fmt.Sprintf("data modify storage %s nbt.v%d set from storage %s %s", c.storageName(), variableID, c.storageName(), sourcePath)
+					if dynamic {
+						helper := c.reserveInternalFunction()
+						c.output.Functions[helper] = []string{"$" + copyCommand}
+						commands = append(commands, fmt.Sprintf("function %s:%s with storage %s scratch", c.functionNamespace, helper, c.storageName()))
+					} else {
+						commands = append(commands, copyCommand)
+					}
+					return commands, nil
+				}
+			}
+		}
 		if call, ok := statement.Value.(*ast.Call); ok {
 			if calleeName, named := callCallee(call); named {
 				if mapping, _, targetObjective, found := c.callTarget(calleeName); found && mapping.ReturnsNBT {
@@ -1873,6 +1893,16 @@ func (c *compiler) compileListValueAtPath(list *ast.List, path string, id ast.Sc
 				return nil, err
 			}
 			commands = append(commands, nestedCommands...)
+			continue
+		}
+		if _, literal := element.(*ast.NBT); literal || c.expressionType(element, id, function) == "nbt" {
+			commands = append(commands, fmt.Sprintf("data modify storage %s %s append value {}", c.storageName(), path))
+			commands = append(commands, fmt.Sprintf("data modify storage %s %s append value \"nbt\"", c.storageName(), typePath))
+			compiled, err := c.compileNBTValueToPath(element, path+"[-1]", id, function)
+			if err != nil {
+				return nil, err
+			}
+			commands = append(commands, compiled...)
 			continue
 		}
 		if c.isStringExpression(element, id, function) {

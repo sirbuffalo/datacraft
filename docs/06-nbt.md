@@ -62,3 +62,15 @@ target["active_effects"] = effects
 ```
 
 The assigned value may be an NBT-compatible literal or an `int`, `bool`, `str`, `list`, or `nbt` variable. DataCraft stages the value in temporary storage, resolves the entity by its registered UUID tag, writes the field, and removes the temporary data. Entity NBT keys must be string literals, and compound fields still use bracket syntax rather than property syntax.
+
+Typed NBT lists may contain compound literals, nested compounds and lists, or existing `nbt` variables:
+
+```dcraft
+speed: nbt = {"id": "speed", "duration": 200}
+effects: list[nbt] = [
+    speed,
+    {"id": "strength", "duration": 100, "flags": [True, False]}
+]
+```
+
+Each element is stored as a compound and receives `nbt` runtime type metadata, so it remains usable when indexed or iterated.

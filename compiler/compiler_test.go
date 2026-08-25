@@ -1054,6 +1054,47 @@ def update():
 	}
 }
 
+func TestCompileNBTListLiterals(t *testing.T) {
+	program, err := parser.Parse(`namespace demo
+
+def build():
+    base: nbt = {"id": "speed", "settings": {"level": 2}}
+    effects: list[nbt] = [base, {"id": "strength", "duration": 100, "flags": [True, False]}]
+    first: nbt = effects[0]
+    index: int = 1
+    selected: nbt = effects[index]
+    for effect: nbt in effects:
+        say(effect)
+    say(effects)
+`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	output, err := compiler.Compile(program, "demo")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	all := []string{}
+	for _, commands := range output.Functions {
+		all = append(all, commands...)
+	}
+	for _, wanted := range []string{
+		`lists.v1 append value {}`,
+		`list_types.v1 append value "nbt"`,
+		`lists.v1[-1] set from storage demo:data nbt.v0`,
+		`lists.v1[-1]."id" set value "strength"`,
+		`lists.v1[-1]."flags" set value []`,
+		`lists.v1[-1]."flags"[-1] set value 0b`,
+		`nbt.v2 set from storage demo:data lists.v1[0]`,
+		`$data modify storage demo:data nbt.v4 set from storage demo:data lists.v1[$(index0)]`,
+		`$data modify storage demo:data variants.v5 set from storage demo:data lists.v1[$(loop_index)]`,
+	} {
+		if !containsSubstring(all, wanted) {
+			t.Fatalf("missing NBT list command %q in %#v", wanted, all)
+		}
+	}
+}
+
 func TestCommandInterpolationRejectsUnknownVariables(t *testing.T) {
 	program, err := parser.Parse("namespace demo\n\ndef run():\n    /say ${missing}\n")
 	if err != nil {

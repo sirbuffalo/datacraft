@@ -45,6 +45,14 @@ target[&#34;Brain&#34;][&#34;memories&#34;] = {&#34;home&#34;: [1, 2, 3]}
 target[&#34;active_effects&#34;] = effects
 </code></pre>
 <p>The assigned value may be an NBT-compatible literal or an <code>int</code>, <code>bool</code>, <code>str</code>, <code>list</code>, or <code>nbt</code> variable. DataCraft stages the value in temporary storage, resolves the entity by its registered UUID tag, writes the field, and removes the temporary data. Entity NBT keys must be string literals, and compound fields still use bracket syntax rather than property syntax.</p>
+<p>Typed NBT lists may contain compound literals, nested compounds and lists, or existing <code>nbt</code> variables:</p>
+<pre><code>speed: nbt = {&#34;id&#34;: &#34;speed&#34;, &#34;duration&#34;: 200}
+effects: list[nbt] = [
+    speed,
+    {&#34;id&#34;: &#34;strength&#34;, &#34;duration&#34;: 100, &#34;flags&#34;: [True, False]}
+]
+</code></pre>
+<p>Each element is stored as a compound and receives <code>nbt</code> runtime type metadata, so it remains usable when indexed or iterated.</p>
 </article>
 </div>
 </section><footer><span>Generated from Markdown</span><span>Go + WebAssembly</span></footer></main></body></html>
